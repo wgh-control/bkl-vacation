@@ -1,54 +1,17 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import type { Role } from './api/types'
 import { Shell } from './components/Shell'
-import { EmployeeHome } from './employee/EmployeeHome'
-import { RequestDetail } from './employee/RequestDetail'
-import { RequestWizard } from './employee/RequestWizard'
-import { HrArea } from './pages/HrArea'
-import { HrReports } from './pages/HrReports'
-import { ManagerArea } from './pages/ManagerArea'
-import { useMe } from './session'
-import type { ReactNode } from 'react'
+import { areaRouteElements, AreasProvider, portalAreas } from './shell/registry'
+import type { PortalArea } from './shell/types'
 
-function RequireRole({ role, children }: { role: Role; children: ReactNode }) {
-  const me = useMe()
-  if (!me.roles.includes(role)) return <Navigate to="/" replace />
-  return children
-}
-
-export function App() {
+export function App({ areas = portalAreas }: { areas?: readonly PortalArea[] }) {
   return (
-    <Routes>
-      <Route element={<Shell />}>
-        <Route index element={<EmployeeHome />} />
-        <Route path="requests/new" element={<RequestWizard />} />
-        <Route path="requests/:id" element={<RequestDetail />} />
-        <Route
-          path="team"
-          element={
-            <RequireRole role="manager">
-              <ManagerArea />
-            </RequireRole>
-          }
-        />
-        <Route
-          path="hr"
-          element={
-            <RequireRole role="hr">
-              <HrArea />
-            </RequireRole>
-          }
-        />
-        <Route
-          path="hr/reports"
-          element={
-            <RequireRole role="hr">
-              <HrReports />
-            </RequireRole>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
+    <AreasProvider areas={areas}>
+      <Routes>
+        <Route element={<Shell />}>
+          {areaRouteElements(areas)}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </AreasProvider>
   )
 }
