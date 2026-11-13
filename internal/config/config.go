@@ -40,6 +40,7 @@ type Config struct {
 	SMTPUser     string
 	SMTPPassword string
 	SMTPFrom     string
+	FinanceEmail string
 
 	Claims ClaimNames
 
@@ -64,6 +65,7 @@ func Load() Config {
 		SMTPUser:                  os.Getenv("SMTP_USER"),
 		SMTPPassword:              os.Getenv("SMTP_PASSWORD"),
 		SMTPFrom:                  os.Getenv("SMTP_FROM"),
+		FinanceEmail:              os.Getenv("FINANCE_EMAIL"),
 		Claims: ClaimNames{
 			Email:          getenv("CLAIM_EMAIL", "email"),
 			Locale:         getenv("CLAIM_LOCALE", "locale"),

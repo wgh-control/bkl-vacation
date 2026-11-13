@@ -224,12 +224,12 @@ INSERT INTO leave_request (
     id, employee_id, leave_year_id, type, status, starts_on, ends_on, counted_days, reason_code,
     certificate_number, replaces_id, successor_id, cancel_reason, overlap_choice, manager_vacant,
     self_approval, needs_confirmation, pay_by_warning, acknowledged_at, confirmed_at, processed_at,
-    processed_by, created_at, updated_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+    processed_by, finance_sent_at, finance_sent_by, created_at, updated_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)`,
 		r.ID, r.EmployeeID, uuidArg(r.LeaveYearID), r.Type, r.Status, dateArg(r.StartsOn), dateArg(r.EndsOn), r.CountedDays,
 		r.ReasonCode, r.CertificateNumber, uuidArg(r.ReplacesID), uuidArg(r.SuccessorID), r.CancelReason, r.OverlapChoice,
 		r.ManagerVacant, r.SelfApproval, r.NeedsConfirmation, r.PayByWarning, timePtr(r.AcknowledgedAt), timePtr(r.ConfirmedAt),
-		timePtr(r.ProcessedAt), uuidArg(r.ProcessedBy), r.CreatedAt.UTC(), r.UpdatedAt.UTC())
+		timePtr(r.ProcessedAt), uuidArg(r.ProcessedBy), timePtr(r.FinanceSentAt), uuidArg(r.FinanceSentBy), r.CreatedAt.UTC(), r.UpdatedAt.UTC())
 	return err
 }
 
@@ -239,12 +239,13 @@ UPDATE leave_request SET
     employee_id=$2, leave_year_id=$3, type=$4, status=$5, starts_on=$6, ends_on=$7, counted_days=$8,
     reason_code=$9, certificate_number=$10, replaces_id=$11, successor_id=$12, cancel_reason=$13,
     overlap_choice=$14, manager_vacant=$15, self_approval=$16, needs_confirmation=$17, pay_by_warning=$18,
-    acknowledged_at=$19, confirmed_at=$20, processed_at=$21, processed_by=$22, updated_at=$23
+    acknowledged_at=$19, confirmed_at=$20, processed_at=$21, processed_by=$22, finance_sent_at=$23,
+    finance_sent_by=$24, updated_at=$25
 WHERE id=$1`,
 		r.ID, r.EmployeeID, uuidArg(r.LeaveYearID), r.Type, r.Status, dateArg(r.StartsOn), dateArg(r.EndsOn), r.CountedDays,
 		r.ReasonCode, r.CertificateNumber, uuidArg(r.ReplacesID), uuidArg(r.SuccessorID), r.CancelReason, r.OverlapChoice,
 		r.ManagerVacant, r.SelfApproval, r.NeedsConfirmation, r.PayByWarning, timePtr(r.AcknowledgedAt), timePtr(r.ConfirmedAt),
-		timePtr(r.ProcessedAt), uuidArg(r.ProcessedBy), r.UpdatedAt.UTC())
+		timePtr(r.ProcessedAt), uuidArg(r.ProcessedBy), timePtr(r.FinanceSentAt), uuidArg(r.FinanceSentBy), r.UpdatedAt.UTC())
 	if err != nil {
 		return err
 	}
@@ -482,9 +483,9 @@ const employeeCols = `id::text, keycloak_sub, display_name, email, locale, local
 
 const yearCols = `id::text, employee_id::text, to_char(starts_on, 'YYYY-MM-DD'), to_char(ends_on, 'YYYY-MM-DD'), granted_days, extra_days, accrued_adjustment, unpaid_calendar_days, excess_unpaid_days, created_at, updated_at`
 
-const requestCols = `id::text, employee_id::text, leave_year_id::text, type, status, to_char(starts_on, 'YYYY-MM-DD'), to_char(ends_on, 'YYYY-MM-DD'), counted_days, reason_code, certificate_number, replaces_id::text, successor_id::text, cancel_reason, overlap_choice, manager_vacant, self_approval, needs_confirmation, pay_by_warning, acknowledged_at, confirmed_at, processed_at, processed_by::text, created_at, updated_at`
+const requestCols = `id::text, employee_id::text, leave_year_id::text, type, status, to_char(starts_on, 'YYYY-MM-DD'), to_char(ends_on, 'YYYY-MM-DD'), counted_days, reason_code, certificate_number, replaces_id::text, successor_id::text, cancel_reason, overlap_choice, manager_vacant, self_approval, needs_confirmation, pay_by_warning, acknowledged_at, confirmed_at, processed_at, processed_by::text, created_at, updated_at, finance_sent_at, finance_sent_by::text`
 
-const requestColsAliased = `r.id::text, r.employee_id::text, r.leave_year_id::text, r.type, r.status, to_char(r.starts_on, 'YYYY-MM-DD'), to_char(r.ends_on, 'YYYY-MM-DD'), r.counted_days, r.reason_code, r.certificate_number, r.replaces_id::text, r.successor_id::text, r.cancel_reason, r.overlap_choice, r.manager_vacant, r.self_approval, r.needs_confirmation, r.pay_by_warning, r.acknowledged_at, r.confirmed_at, r.processed_at, r.processed_by::text, r.created_at, r.updated_at`
+const requestColsAliased = `r.id::text, r.employee_id::text, r.leave_year_id::text, r.type, r.status, to_char(r.starts_on, 'YYYY-MM-DD'), to_char(r.ends_on, 'YYYY-MM-DD'), r.counted_days, r.reason_code, r.certificate_number, r.replaces_id::text, r.successor_id::text, r.cancel_reason, r.overlap_choice, r.manager_vacant, r.self_approval, r.needs_confirmation, r.pay_by_warning, r.acknowledged_at, r.confirmed_at, r.processed_at, r.processed_by::text, r.created_at, r.updated_at, r.finance_sent_at, r.finance_sent_by::text`
 
 const noteCols = `id::text, request_id::text, recipient_employee_id::text, kind, recipient_email, language, due_at, sent_at, last_error, notice_created, created_at`
 
@@ -547,8 +548,8 @@ func scanYear(row scanner) (model.LeaveYear, error) {
 func scanRequest(row scanner) (model.Request, error) {
 	var r model.Request
 	var start, end string
-	var yearID, replaces, successor, processedBy *string
-	err := row.Scan(&r.ID, &r.EmployeeID, &yearID, &r.Type, &r.Status, &start, &end, &r.CountedDays, &r.ReasonCode, &r.CertificateNumber, &replaces, &successor, &r.CancelReason, &r.OverlapChoice, &r.ManagerVacant, &r.SelfApproval, &r.NeedsConfirmation, &r.PayByWarning, &r.AcknowledgedAt, &r.ConfirmedAt, &r.ProcessedAt, &processedBy, &r.CreatedAt, &r.UpdatedAt)
+	var yearID, replaces, successor, processedBy, financeBy *string
+	err := row.Scan(&r.ID, &r.EmployeeID, &yearID, &r.Type, &r.Status, &start, &end, &r.CountedDays, &r.ReasonCode, &r.CertificateNumber, &replaces, &successor, &r.CancelReason, &r.OverlapChoice, &r.ManagerVacant, &r.SelfApproval, &r.NeedsConfirmation, &r.PayByWarning, &r.AcknowledgedAt, &r.ConfirmedAt, &r.ProcessedAt, &processedBy, &r.CreatedAt, &r.UpdatedAt, &r.FinanceSentAt, &financeBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.Request{}, ErrNotFound
 	}
@@ -559,6 +560,7 @@ func scanRequest(row scanner) (model.Request, error) {
 	r.ReplacesID = deref(replaces)
 	r.SuccessorID = deref(successor)
 	r.ProcessedBy = deref(processedBy)
+	r.FinanceSentBy = deref(financeBy)
 	r.StartsOn, err = time.Parse("2006-01-02", start)
 	if err != nil {
 		return model.Request{}, err

@@ -111,6 +111,8 @@ type RequestView struct {
 	ConfirmedAt        string `json:"confirmed_at,omitempty"`
 	ProcessedAt        string `json:"processed_at,omitempty"`
 	ProcessedBy        string `json:"processed_by,omitempty"`
+	FinanceSentAt      string `json:"finance_sent_at,omitempty"`
+	FinanceSentBy      string `json:"finance_sent_by,omitempty"`
 	CreatedAt          string `json:"created_at"`
 }
 

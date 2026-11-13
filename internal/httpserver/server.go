@@ -51,6 +51,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/team/requests", s.authed(s.team))
 	mux.HandleFunc("GET /api/hr/queue", s.authed(s.hrQueue))
 	mux.HandleFunc("POST /api/hr/requests/{id}/processed", s.authed(s.processed))
+	mux.HandleFunc("POST /api/hr/requests/{id}/finance", s.authed(s.finance))
 	mux.HandleFunc("GET /api/hr/export", s.authed(s.export))
 	mux.HandleFunc("GET /api/hr/warnings", s.authed(s.warnings))
 	mux.HandleFunc("PUT /api/hr/calendar", s.authed(s.putCalendar))
@@ -262,6 +263,11 @@ func (s *Server) hrQueue(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) processed(w http.ResponseWriter, r *http.Request) {
 	out, err := s.Svc.MarkProcessed(r.Context(), principal(r), r.PathValue("id"))
+	respond(w, out, err)
+}
+
+func (s *Server) finance(w http.ResponseWriter, r *http.Request) {
+	out, err := s.Svc.SendToFinance(r.Context(), principal(r), r.PathValue("id"))
 	respond(w, out, err)
 }
 

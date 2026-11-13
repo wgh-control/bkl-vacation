@@ -14,6 +14,7 @@ import (
 	"github.com/wgh-control/bkl-vacation/internal/config"
 	"github.com/wgh-control/bkl-vacation/internal/httpserver"
 	"github.com/wgh-control/bkl-vacation/internal/identity"
+	"github.com/wgh-control/bkl-vacation/internal/notify"
 	"github.com/wgh-control/bkl-vacation/internal/portal"
 	"github.com/wgh-control/bkl-vacation/internal/store"
 )
@@ -33,6 +34,13 @@ func main() {
 	defer pool.Close()
 	repo := store.NewPostgres(pool)
 	svc := portal.New(repo, cfg.KeycloakHRGroup, cfg.Claims)
+	svc.FinanceEmail = cfg.FinanceEmail
+	if cfg.SMTPHost != "" && cfg.SMTPFrom != "" {
+		svc.Mail = notify.SMTP{
+			Host: cfg.SMTPHost, Port: cfg.SMTPPort, Mode: cfg.SMTPTLS,
+			User: cfg.SMTPUser, Password: cfg.SMTPPassword, From: cfg.SMTPFrom,
+		}
+	}
 	srv := &httpserver.Server{
 		Svc: svc,
 		Auth: &identity.Validator{

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/wgh-control/bkl-vacation/internal/leave"
 	"github.com/wgh-control/bkl-vacation/internal/model"
 	"github.com/wgh-control/bkl-vacation/internal/notify"
 	"github.com/wgh-control/bkl-vacation/internal/store"
@@ -63,10 +64,15 @@ func (s *Service) Dispatch(ctx context.Context, sender notify.Sender) error {
 			if err != nil {
 				return err
 			}
+			payBy := ""
+			if req.Type == model.TypeVacation {
+				payBy = leave.FormatDate(leave.PayByDate(req.StartsOn))
+			}
 			content := notify.Render(notify.Vars{
 				Kind: n.Kind, Locale: n.Language, Employee: owner.DisplayName,
 				Start: req.StartsOn.Format("2006-01-02"), End: req.EndsOn.Format("2006-01-02"),
 				Type: string(req.Type), Moved: req.ReplacesID != "",
+				CountedDays: req.CountedDays, PayBy: payBy, EmployeeNumber: owner.EmployeeNumber,
 			})
 			if !n.NoticeCreated {
 				if err := q.InsertNotice(ctx, model.Notice{
@@ -172,6 +178,19 @@ func (s *Service) queueSubmitted(ctx context.Context, q store.Queries, owner mod
 		}
 	}
 	return s.queueHRApproval(ctx, q, owner, req)
+}
+
+func (s *Service) queueVacationApproved(ctx context.Context, q store.Queries, req model.Request) error {
+	hrs, err := s.hrPeople(ctx, q)
+	if err != nil {
+		return err
+	}
+	for _, hr := range hrs {
+		if err := s.queueNotice(ctx, q, req, hr, notify.KindApprovedHR); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) queueHRApproval(ctx context.Context, q store.Queries, owner model.Employee, req model.Request) error {

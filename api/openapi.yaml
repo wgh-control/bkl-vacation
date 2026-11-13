@@ -439,6 +439,31 @@ paths:
                       $ref: "#/components/schemas/QueueItem"
         "403":
           $ref: "#/components/responses/Error"
+  /hr/requests/{id}/finance:
+    post:
+      tags: [hr]
+      summary: Send an approved vacation to finance for payment
+      description: |
+        HR only. The vacation must already be approved. The message goes to
+        `FINANCE_EMAIL` from the environment. The mailbox is not stored in the
+        repo. Payroll still calculates the amount. A second call does not send again.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: Sent. `finance_sent_at` is set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
   /hr/requests/{id}/processed:
     post:
       tags: [hr]
@@ -668,7 +693,8 @@ components:
             planning_horizon, hire_date_required, certificate_required,
             overlap_choice_required, confirmation_too_early, cannot_cancel,
             self_approval, reason_mandatory, invalid_status, export_scope,
-            crosses_working_year, move_pending, locale, inactive.
+            crosses_working_year, move_pending, locale, inactive,
+            finance_unconfigured, already_sent, mail_failed.
         message:
           type: string
     Profile:
@@ -899,6 +925,11 @@ components:
           type: string
           format: date-time
         processed_by:
+          type: string
+        finance_sent_at:
+          type: string
+          format: date-time
+        finance_sent_by:
           type: string
         created_at:
           type: string

@@ -14,6 +14,8 @@ const (
 	KindApprovalManager   = "approval_needed_manager"
 	KindApprovalHR        = "approval_needed_hr"
 	KindApproved          = "approved"
+	KindApprovedHR        = "approved_hr"
+	KindFinance           = "finance_payment"
 	KindDeclined          = "declined"
 	KindNotice14          = "notice_14"
 	KindConfirm5          = "confirm_5"
@@ -103,6 +105,40 @@ func composeText(v Vars) Content {
 			Subject: "Request approved",
 			Title:   "Request approved",
 			Body:    fmt.Sprintf("Your %s request from %s to %s was approved.", label, start, end),
+		}
+	case KindApprovedHR:
+		if ru {
+			return Content{
+				Subject: "Согласован отпуск: " + employeeName,
+				Title:   "Отпуск согласован",
+				Body:    fmt.Sprintf("%s: отпуск с %s по %s, %d дн. Его можно отправить в финансы для оплаты.%s", employeeName, start, end, v.CountedDays, payBySentence(ru, v.PayBy)),
+			}
+		}
+		return Content{
+			Subject: "Vacation approved: " + employeeName,
+			Title:   "Vacation approved",
+			Body:    fmt.Sprintf("%s: vacation from %s to %s, %d days. You can send it to finance for payment.%s", employeeName, start, end, v.CountedDays, payBySentence(ru, v.PayBy)),
+		}
+	case KindFinance:
+		who := employeeName
+		if v.EmployeeNumber != "" {
+			if ru {
+				who += ", табельный номер " + v.EmployeeNumber
+			} else {
+				who += ", employee number " + v.EmployeeNumber
+			}
+		}
+		if ru {
+			return Content{
+				Subject: "Отпуск к оплате: " + employeeName,
+				Title:   "Отпуск к оплате",
+				Body:    fmt.Sprintf("%s. Отпуск с %s по %s, %d дн.%s Сумму считает бухгалтерия, это письмо её не содержит.", who, start, end, v.CountedDays, payBySentence(ru, v.PayBy)),
+			}
+		}
+		return Content{
+			Subject: "Vacation to pay: " + employeeName,
+			Title:   "Vacation to pay",
+			Body:    fmt.Sprintf("%s. Vacation from %s to %s, %d days.%s Payroll calculates the amount. This message does not.", who, start, end, v.CountedDays, payBySentence(ru, v.PayBy)),
 		}
 	case KindDeclined:
 		if ru {
@@ -198,6 +234,16 @@ func composeText(v Vars) Content {
 	default:
 		return Content{Subject: kind, Title: kind, Body: strings.TrimSpace(employeeName + " " + start + " " + end)}
 	}
+}
+
+func payBySentence(ru bool, payBy string) string {
+	if strings.TrimSpace(payBy) == "" {
+		return ""
+	}
+	if ru {
+		return " Выплатить не позднее " + payBy + "."
+	}
+	return " Pay no later than " + payBy + "."
 }
 
 // DueInstant returns when a scheduled notice should first be attempted.

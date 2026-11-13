@@ -148,9 +148,11 @@ func (s *Service) present(r model.Request, aud string, holiday func(time.Time) b
 		CountedDays: days, ReasonCode: r.ReasonCode, ReplacesRequestID: r.ReplacesID,
 		SuccessorRequestID: r.SuccessorID, CancelReason: r.CancelReason, OverlapChoice: r.OverlapChoice,
 		ManagerVacant: r.ManagerVacant, SelfApproval: r.SelfApproval, NeedsConfirmation: r.NeedsConfirmation,
-		PayByWarning: r.PayByWarning, ProcessedBy: r.ProcessedBy,
+		PayByWarning:   r.PayByWarning,
 		AcknowledgedAt: stamp(r.AcknowledgedAt), ConfirmedAt: stamp(r.ConfirmedAt),
-		ProcessedAt: stamp(r.ProcessedAt), CreatedAt: r.CreatedAt.UTC().Format(time.RFC3339),
+		ProcessedAt: stamp(r.ProcessedAt), ProcessedBy: r.ProcessedBy,
+		FinanceSentAt: stamp(r.FinanceSentAt), FinanceSentBy: r.FinanceSentBy,
+		CreatedAt: r.CreatedAt.UTC().Format(time.RFC3339),
 	}
 	showCert := aud == "self" || aud == "hr" || (aud == "manager" && r.Status == model.StatusPendingManager)
 	if showCert {

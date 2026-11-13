@@ -3,12 +3,14 @@ package portal
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/wgh-control/bkl-vacation/internal/calendar"
 	"github.com/wgh-control/bkl-vacation/internal/identity"
 	"github.com/wgh-control/bkl-vacation/internal/leave"
 	"github.com/wgh-control/bkl-vacation/internal/model"
+	"github.com/wgh-control/bkl-vacation/internal/notify"
 	"github.com/wgh-control/bkl-vacation/internal/report"
 	"github.com/wgh-control/bkl-vacation/internal/store"
 )
@@ -64,6 +66,81 @@ func (s *Service) MarkProcessed(ctx context.Context, p identity.Principal, id st
 		}
 		if err := s.audit(ctx, q, actor.ID, req.ID, owner.ID, "processed", string(before), string(req.Status)); err != nil {
 			return err
+		}
+		out, err = s.viewRequest(ctx, q, req, "hr")
+		return err
+	})
+	return out, err
+}
+
+// SendToFinance mails an approved vacation to the finance mailbox from configuration.
+// The amount stays in payroll. A second call does not send again.
+func (s *Service) SendToFinance(ctx context.Context, p identity.Principal, id string) (RequestView, error) {
+	to := strings.TrimSpace(s.FinanceEmail)
+	if to == "" || !strings.Contains(to, "@") || strings.ContainsAny(to, " \t") {
+		return RequestView{}, code("finance_unconfigured", "FINANCE_EMAIL is not set", 503)
+	}
+	if s.Mail == nil {
+		return RequestView{}, code("finance_unconfigured", "SMTP is not configured", 503)
+	}
+	var msg notify.Message
+	var actorID string
+	err := s.tx(ctx, func(q store.Queries) error {
+		actor, err := s.requireHR(ctx, q, p)
+		if err != nil {
+			return err
+		}
+		actorID = actor.ID
+		req, err := q.GetRequest(ctx, id)
+		if err != nil {
+			return missing(err)
+		}
+		if req.Type != model.TypeVacation || !approvedStatus(req.Status) {
+			return code("invalid_status", "only an approved vacation can be sent to finance", 409)
+		}
+		if req.FinanceSentAt != nil {
+			return code("already_sent", "this vacation was already sent to finance", 409)
+		}
+		owner, err := q.GetEmployee(ctx, req.EmployeeID)
+		if err != nil {
+			return err
+		}
+		lang := actor.Locale
+		if lang != "en" {
+			lang = "ru"
+		}
+		content := notify.Render(notify.Vars{
+			Kind: notify.KindFinance, Locale: lang, Role: "finance", Type: string(req.Type),
+			Employee: owner.DisplayName, EmployeeNumber: owner.EmployeeNumber,
+			Start: leave.FormatDate(req.StartsOn), End: leave.FormatDate(req.EndsOn),
+			CountedDays: req.CountedDays, PayBy: leave.FormatDate(leave.PayByDate(req.StartsOn)),
+		})
+		msg = notify.Message{To: to, Subject: content.Subject, Body: content.Body, HTML: content.HTML}
+		return nil
+	})
+	if err != nil {
+		return RequestView{}, err
+	}
+	if err := s.Mail.Send(ctx, msg); err != nil {
+		return RequestView{}, code("mail_failed", "the finance message could not be sent", 502)
+	}
+	var out RequestView
+	err = s.tx(ctx, func(q store.Queries) error {
+		req, err := q.GetRequest(ctx, id)
+		if err != nil {
+			return missing(err)
+		}
+		if req.FinanceSentAt == nil {
+			now := s.now()
+			req.FinanceSentAt = &now
+			req.FinanceSentBy = actorID
+			req.UpdatedAt = now
+			if err := q.UpdateRequest(ctx, req); err != nil {
+				return err
+			}
+			if err := s.audit(ctx, q, actorID, req.ID, req.EmployeeID, "finance", string(req.Status), string(req.Status)); err != nil {
+				return err
+			}
 		}
 		out, err = s.viewRequest(ctx, q, req, "hr")
 		return err

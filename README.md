@@ -21,7 +21,7 @@ go run ./cmd/worker
 
 The API listens on `:8080` (`HTTP_ADDR`). OpenAPI is `api/openapi.yaml` in the repo and `GET /api/openapi.yaml` on the server. Paths in the spec are relative to `/api`.
 
-`go run ./cmd/api` requires `DATABASE_URL`, `KEYCLOAK_ISSUER`, and `KEYCLOAK_CLIENT_ID`. The worker requires `DATABASE_URL`. Directory sync runs only when `KEYCLOAK_ADMIN_CLIENT_ID` is set. Mail is sent only when `SMTP_HOST` and `SMTP_FROM` are set; a portal notice is still stored when mail fails. Each notice is a plain-text part plus an HTML part, in Russian or English, for the employee, the manager, or HR.
+`go run ./cmd/api` requires `DATABASE_URL`, `KEYCLOAK_ISSUER`, and `KEYCLOAK_CLIENT_ID`. The worker requires `DATABASE_URL`. Directory sync runs only when `KEYCLOAK_ADMIN_CLIENT_ID` is set. Mail is sent only when `SMTP_HOST` and `SMTP_FROM` are set; a portal notice is still stored when mail fails. Each notice is a plain-text part plus an HTML part, in Russian or English, for the employee, the manager, or HR. When a vacation is approved, HR also receives that vacation by mail and can send it to finance for payment. The finance mailbox is `FINANCE_EMAIL`. It is not written in this repo.
 
 | Variable | Role |
 | --- | --- |
@@ -35,6 +35,7 @@ The API listens on `:8080` (`HTTP_ADDR`). OpenAPI is `api/openapi.yaml` in the r
 | `KEYCLOAK_ADMIN_CLIENT_SECRET` | Secret for that client |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS` | Mail server. `SMTP_TLS` is `starttls` (default), `tls`, or `off` |
 | `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Mail credentials and From address |
+| `FINANCE_EMAIL` | Mailbox that receives an approved vacation for payment. Empty until it is set |
 | `CLAIM_EMAIL`, `CLAIM_LOCALE`, `CLAIM_EMPLOYEE_NUMBER`, `CLAIM_POSITION`, `CLAIM_DEPARTMENT`, `CLAIM_MANAGER`, `CLAIM_HIRE_DATE` | Token and directory attribute names |
 | `SYNC_INTERVAL` | Directory sync period, default `15m` |
 | `NOTIFY_INTERVAL` | Notice scan period, default `1m` |

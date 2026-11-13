@@ -203,6 +203,11 @@ func (s *Service) hrDecision(ctx context.Context, q store.Queries, actor, owner 
 	if err := s.queueNotice(ctx, q, *req, owner, notify.KindApproved); err != nil {
 		return err
 	}
+	if req.Type == model.TypeVacation {
+		if err := s.queueVacationApproved(ctx, q, *req); err != nil {
+			return err
+		}
+	}
 	return s.audit(ctx, q, actor.ID, req.ID, owner.ID, "approve", string(before), string(req.Status))
 }
 

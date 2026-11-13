@@ -12,17 +12,20 @@ import (
 	"github.com/wgh-control/bkl-vacation/internal/identity"
 	"github.com/wgh-control/bkl-vacation/internal/leave"
 	"github.com/wgh-control/bkl-vacation/internal/model"
+	"github.com/wgh-control/bkl-vacation/internal/notify"
 	"github.com/wgh-control/bkl-vacation/internal/org"
 	"github.com/wgh-control/bkl-vacation/internal/store"
 )
 
 // Service is the vacation portal. Both the API and the worker call it.
 type Service struct {
-	Repo    store.Repo
-	Now     func() time.Time
-	NewID   func() string
-	HRGroup string
-	Claims  config.ClaimNames
+	Repo         store.Repo
+	Now          func() time.Time
+	NewID        func() string
+	HRGroup      string
+	Claims       config.ClaimNames
+	Mail         notify.Sender
+	FinanceEmail string
 }
 
 func New(repo store.Repo, hrGroup string, claims config.ClaimNames) *Service {

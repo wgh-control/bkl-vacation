@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"github.com/wgh-control/bkl-vacation/api"
 	"github.com/wgh-control/bkl-vacation/internal/config"
 	"github.com/wgh-control/bkl-vacation/internal/identity"
+	"github.com/wgh-control/bkl-vacation/internal/notify"
 	"github.com/wgh-control/bkl-vacation/internal/portal"
 	"github.com/wgh-control/bkl-vacation/internal/store"
 )
@@ -48,6 +50,9 @@ func TestEmployeeAndHRRoutes(t *testing.T) {
 		HireDate: "hire_date", Manager: "manager", Department: "department", EmployeeNumber: "employee_number",
 	})
 	svc.Now = func() time.Time { return time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC) }
+	box := &sentMail{}
+	svc.Mail = box
+	svc.FinanceEmail = "payroll@example.com"
 	srv := &Server{Svc: svc, Auth: headerAuth{}, Ready: mem.Ping}
 	h := srv.Handler()
 
@@ -74,6 +79,11 @@ func TestEmployeeAndHRRoutes(t *testing.T) {
 	}
 	do(t, h, http.MethodPost, "/api/approvals/"+created.ID+"/decision", `{"decision":"approve"}`, map[string]string{"X-Sub": "mgr", "X-Name": "Mia"}, http.StatusOK)
 	do(t, h, http.MethodPost, "/api/approvals/"+created.ID+"/decision", `{"decision":"approve"}`, map[string]string{"X-Sub": "hr", "X-Name": "Ira", "X-Groups": "hr"}, http.StatusOK)
+	rec = do(t, h, http.MethodPost, "/api/hr/requests/"+created.ID+"/finance", "", map[string]string{"X-Sub": "hr", "X-Name": "Ira", "X-Groups": "hr"}, http.StatusOK)
+	if !strings.Contains(rec, `"finance_sent_at"`) || box.to != "payroll@example.com" || !strings.Contains(box.html, "Финансам") {
+		t.Fatalf("finance %s to %s", rec, box.to)
+	}
+	do(t, h, http.MethodPost, "/api/hr/requests/"+created.ID+"/finance", "", map[string]string{"X-Sub": "hr", "X-Name": "Ira", "X-Groups": "hr"}, http.StatusConflict)
 
 	// HR submits their own three request types on the employee routes.
 	for _, raw := range []string{
@@ -99,9 +109,20 @@ func TestEmployeeAndHRRoutes(t *testing.T) {
 	if !bytes.Contains(xls, []byte(">ada<")) || bytes.Contains(xls, []byte(">Ira<")) {
 		t.Fatalf("xls scope %s", xls)
 	}
-	if !strings.Contains(string(api.OpenAPI), "planned_days") || !strings.Contains(string(api.OpenAPI), "/hr/export") {
+	if !strings.Contains(string(api.OpenAPI), "planned_days") || !strings.Contains(string(api.OpenAPI), "/hr/export") || !strings.Contains(string(api.OpenAPI), "/hr/requests/{id}/finance") {
 		t.Fatal("openapi")
 	}
+}
+
+type sentMail struct {
+	to   string
+	html string
+}
+
+func (s *sentMail) Send(_ context.Context, msg notify.Message) error {
+	s.to = msg.To
+	s.html = msg.HTML
+	return nil
 }
 
 func mustID(t *testing.T, h http.Handler, sub string) string {

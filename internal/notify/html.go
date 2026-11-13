@@ -21,14 +21,17 @@ var (
 // Vars is the data for one notice. Type is vacation, day_off, or sick.
 // Role is employee, manager, or hr. An empty role is chosen from Kind.
 type Vars struct {
-	Kind     string
-	Locale   string
-	Employee string
-	Start    string
-	End      string
-	Type     string
-	Role     string
-	Moved    bool
+	Kind           string
+	Locale         string
+	Employee       string
+	Start          string
+	End            string
+	Type           string
+	Role           string
+	Moved          bool
+	CountedDays    int
+	PayBy          string
+	EmployeeNumber string
 }
 
 type mailData struct {
@@ -111,8 +114,10 @@ func (v Vars) role() string {
 	switch v.Kind {
 	case KindApprovalManager, KindRemind3Manager:
 		return "manager"
-	case KindApprovalHR, KindRemind3HR, KindConfirmedHR:
+	case KindApprovalHR, KindRemind3HR, KindConfirmedHR, KindApprovedHR:
 		return "hr"
+	case KindFinance:
+		return "finance"
 	default:
 		return "employee"
 	}
@@ -130,6 +135,11 @@ func eyebrow(role string, ru bool) string {
 			return "Кадрам"
 		}
 		return "HR"
+	case "finance":
+		if ru {
+			return "Финансам"
+		}
+		return "Finance"
 	default:
 		if ru {
 			return "Сотруднику"

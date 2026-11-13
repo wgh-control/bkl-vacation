@@ -26,7 +26,7 @@ func TestFormatMessageUTF8(t *testing.T) {
 
 func TestHTMLTemplates(t *testing.T) {
 	for _, kind := range []string{
-		KindSubmitted, KindApprovalManager, KindApprovalHR, KindApproved, KindDeclined,
+		KindSubmitted, KindApprovalManager, KindApprovalHR, KindApproved, KindApprovedHR, KindFinance, KindDeclined,
 		KindNotice14, KindConfirm5, KindRemind3Employee, KindRemind3Manager, KindRemind3HR,
 		KindConfirmedHR, KindProcessedEmployee,
 	} {

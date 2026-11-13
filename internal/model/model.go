@@ -97,6 +97,8 @@ type Request struct {
 	ConfirmedAt       *time.Time
 	ProcessedAt       *time.Time
 	ProcessedBy       string
+	FinanceSentAt     *time.Time
+	FinanceSentBy     string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }

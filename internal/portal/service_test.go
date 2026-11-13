@@ -638,6 +638,76 @@ func TestWorkflowMail(t *testing.T) {
 	}
 }
 
+func TestSendApprovedVacationToFinance(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	mgr := person("mgr", "Mia", "")
+	hr := person("hr", "Ira", "mgr", "hr")
+	emp := person("emp", "Ada", "mgr")
+	for _, p := range []identity.Principal{mgr, hr, emp} {
+		if _, err := svc.Me(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	vac, err := svc.CreateRequest(ctx, emp, CreateInput{Type: "vacation", StartsOn: "2027-06-15", EndsOn: "2027-06-28"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Decide(ctx, mgr, vac.ID, DecisionInput{Decision: "approve"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Decide(ctx, hr, vac.ID, DecisionInput{Decision: "approve"}); err != nil {
+		t.Fatal(err)
+	}
+	var kinds []string
+	if err := svc.Repo.View(ctx, func(q store.Queries) error {
+		due, err := q.ListUnsentDue(ctx, svc.Now())
+		for _, n := range due {
+			if n.RequestID == vac.ID {
+				kinds = append(kinds, n.Kind)
+			}
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !hasKind(kinds, "approved_hr") {
+		t.Fatalf("HR did not receive the approved vacation: %v", kinds)
+	}
+	if _, err := svc.SendToFinance(ctx, hr, vac.ID); codeOf(t, err) != "finance_unconfigured" {
+		t.Fatal(err)
+	}
+	box := &captureMail{}
+	svc.Mail = box
+	svc.FinanceEmail = "payroll@example.com"
+	sent, err := svc.SendToFinance(ctx, hr, vac.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sent.FinanceSentAt == "" || len(box.msgs) != 1 || box.msgs[0].To != "payroll@example.com" {
+		t.Fatalf("%+v %d", sent, len(box.msgs))
+	}
+	if !strings.Contains(box.msgs[0].HTML, "Финансам") || !strings.Contains(box.msgs[0].Body, "emp") || !strings.Contains(box.msgs[0].HTML, "#f4f1eb") {
+		t.Fatal(box.msgs[0].Body)
+	}
+	if codeOf(t, mustErr(svc.SendToFinance(ctx, hr, vac.ID))) != "already_sent" {
+		t.Fatal("second send")
+	}
+	off, err := svc.CreateRequest(ctx, emp, CreateInput{Type: "day_off", StartsOn: "2026-12-14", EndsOn: "2026-12-14", ReasonCode: "compensatory_overtime"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Decide(ctx, mgr, off.ID, DecisionInput{Decision: "approve"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Decide(ctx, hr, off.ID, DecisionInput{Decision: "approve"}); err != nil {
+		t.Fatal(err)
+	}
+	if codeOf(t, mustErr(svc.SendToFinance(ctx, hr, off.ID))) != "invalid_status" {
+		t.Fatal("day off")
+	}
+}
+
 func hasKind(kinds []string, want string) bool {
 	for _, k := range kinds {
 		if k == want {

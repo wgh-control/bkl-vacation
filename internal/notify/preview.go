@@ -24,6 +24,8 @@ func Samples() []Sample {
 		{"manager-remind-3", Vars{Kind: KindRemind3Manager, Type: "vacation", Role: "manager"}},
 		{"hr-remind-3", Vars{Kind: KindRemind3HR, Type: "vacation", Role: "hr"}},
 		{"hr-to-process", Vars{Kind: KindConfirmedHR, Type: "vacation", Role: "hr"}},
+		{"hr-approved-vacation", Vars{Kind: KindApprovedHR, Type: "vacation", Role: "hr", CountedDays: 14, PayBy: "2027-06-11"}},
+		{"finance-payment", Vars{Kind: KindFinance, Type: "vacation", Role: "finance", CountedDays: 14, PayBy: "2027-06-11", EmployeeNumber: "42"}},
 		{"employee-processed", Vars{Kind: KindProcessedEmployee, Type: "vacation", Role: "employee"}},
 	}
 	var out []Sample
