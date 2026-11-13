@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: placeholder-namespace
+images:
+- name: bkl-vacation
+  newName: placeholder.invalid/placeholder-image-name
+  newTag: placeholder-image-tag
+resources:
+- serviceaccount.yaml
+- configmap.yaml
+- api-deployment.yaml
+- api-service.yaml
+- ingress.yaml
+- worker-deployment.yaml
+- migrate-job.yaml

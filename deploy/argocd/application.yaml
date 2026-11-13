@@ -1,0 +1,28 @@
+# Apply this once, after the placeholders below are replaced.
+# It is not part of the Kustomize build Argo CD syncs.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bkl-vacation
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: bkl-vacation
+    app.kubernetes.io/part-of: bkl-vacation
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/wgh-control/bkl-vacation.git
+    targetRevision: main
+    path: deploy
+  destination:
+    name: placeholder-cluster-name
+    namespace: placeholder-namespace
+  syncPolicy:
+    # Automated, with prune and self-heal off until the first production
+    # sync has been reviewed by hand. After that review, set selfHeal to
+    # true. Read deploy/README.md before turning prune on.
+    automated:
+      prune: false
+      selfHeal: false
+    syncOptions:
+      - ApplyOutOfSyncOnly=true

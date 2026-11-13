@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bkl-vacation
+  labels:
+    app.kubernetes.io/name: bkl-vacation
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: bkl-vacation
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  ingressClassName: placeholder-ingress-class
+  rules:
+    - host: placeholder-portal-host.invalid
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bkl-vacation
+                port:
+                  name: http

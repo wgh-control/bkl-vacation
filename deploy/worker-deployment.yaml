@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bkl-vacation-worker
+  labels:
+    app.kubernetes.io/name: bkl-vacation
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: bkl-vacation
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  # One replica to start. A later replica is safe once the worker holds
+  # its Postgres advisory lock around mail and directory sync.
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bkl-vacation
+      app.kubernetes.io/component: worker
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: bkl-vacation
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/part-of: bkl-vacation
+    spec:
+      serviceAccountName: bkl-vacation
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: bkl-vacation
+          imagePullPolicy: IfNotPresent
+          command: ["/app/worker"]
+          envFrom:
+            - configMapRef:
+                name: bkl-vacation
+            - secretRef:
+                name: bkl-vacation
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
