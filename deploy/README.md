@@ -2,33 +2,69 @@
 
 GitLab CI builds one image and pushes it tagged with the commit SHA. Argo CD syncs this directory onto Kubernetes. The pipeline does not apply manifests.
 
-PostgreSQL, Keycloak, and SMTP stay outside the cluster. This tree has no database, identity provider, or mail server. Argo CD itself and the container registry are platform prerequisites. This Application does not install them.
+PostgreSQL, Keycloak, SMTP, and Vault stay outside the cluster. This tree does not install them, and it does not install External Secrets Operator or Argo CD. Those operators are platform prerequisites.
 
-## Placeholders
+Runtime secrets are read from HashiCorp Vault by External Secrets Operator, which writes Secret `bkl-vacation`. The API, the worker, and the migration Job consume that Secret as environment variables. No secret values are stored in git.
 
-These strings are tokens. They are not a chosen cluster, GitLab group, or registry. Replace each one before the first production sync.
+Until Vault is connected, set the same secret names as masked GitLab CI/CD variables. The pipeline does not read the runtime ones, and it does not copy them into the cluster. Copy them into the Vault path below, then remove the runtime variables from GitLab.
 
-| Token | Replace with | Where |
+## Variables
+
+Secrets belong in Vault. Until that path is connected, the GitLab CI/CD variable of the same name is the place to fill the value. Non-secrets stay in GitLab or in the committed ConfigMap, as the Where column says.
+
+| Name | Purpose | Where it is set |
 | --- | --- | --- |
-| `placeholder-gitlab-group` | GitLab group path | `.gitlab-ci.yml` header |
-| `placeholder-gitlab-project` | GitLab project path | `.gitlab-ci.yml` header |
-| `placeholder.invalid` | Container registry host | `deploy/kustomization.yaml` `newName`, CI variable `REGISTRY_HOST`, and the hosts inside the ConfigMap |
-| `placeholder-image-name` | Image repository path under that host | `deploy/kustomization.yaml` `newName`, CI variable `IMAGE_NAME` |
-| `placeholder-image-tag` | Full git commit SHA | `deploy/kustomization.yaml` `newTag`. CI writes this. Do not use `latest` |
+| `DATABASE_URL` | External Postgres DSN, with TLS | Vault KV v2 `placeholder-vault-mount`, path `bkl-vacation/runtime`, property `DATABASE_URL`. Until Vault is connected: masked GitLab CI/CD variable `DATABASE_URL` |
+| `KEYCLOAK_CLIENT_SECRET` | Client secret of the portal client in the existing Keycloak realm | Vault `placeholder-vault-mount` / `bkl-vacation/runtime` property `KEYCLOAK_CLIENT_SECRET`. Until Vault is connected: masked GitLab CI/CD variable `KEYCLOAK_CLIENT_SECRET` |
+| `SMTP_USERNAME` | Username for the existing SMTP server | Vault `placeholder-vault-mount` / `bkl-vacation/runtime` property `SMTP_USERNAME`. Until Vault is connected: masked GitLab CI/CD variable `SMTP_USERNAME` |
+| `SMTP_PASSWORD` | Password for the existing SMTP server | Vault `placeholder-vault-mount` / `bkl-vacation/runtime` property `SMTP_PASSWORD`. Until Vault is connected: masked GitLab CI/CD variable `SMTP_PASSWORD` |
+| `REGISTRY_PASSWORD` | Password used to push the image | Vault `placeholder-vault-mount` / `bkl-vacation/ci` property `REGISTRY_PASSWORD` once GitLab is connected to Vault. Until then: masked GitLab CI/CD variable `REGISTRY_PASSWORD`. The pipeline reads the GitLab variable |
+| `REGISTRY_USER` | User used to push the image | Vault `placeholder-vault-mount` / `bkl-vacation/ci` property `REGISTRY_USER` once GitLab is connected to Vault. Until then: masked GitLab CI/CD variable `REGISTRY_USER`. The pipeline reads the GitLab variable |
+| `GIT_PUSH_TOKEN` | Token that can push the image-tag commit to the git revision Argo CD watches | Vault `placeholder-vault-mount` / `bkl-vacation/ci` property `GIT_PUSH_TOKEN` once GitLab is connected to Vault. Until then: masked GitLab CI/CD variable `GIT_PUSH_TOKEN`. The pipeline reads the GitLab variable |
+| `REGISTRY_HOST` | Container registry host. Replaces `placeholder.invalid` in the image name | GitLab CI/CD variable `REGISTRY_HOST`. Not a secret |
+| `IMAGE_NAME` | Image repository path under that host. Replaces `placeholder-image-name` | GitLab CI/CD variable `IMAGE_NAME`. Not a secret |
+| `GIT_PUSH_URL` | HTTPS URL of the git revision Argo CD watches, with no credentials in the URL. With the recommended pull mirror this is `https://github.com/wgh-control/bkl-vacation.git` | GitLab CI/CD variable `GIT_PUSH_URL`. Not a secret |
+| `GIT_PUSH_USER` | Username for `GIT_PUSH_TOKEN`. Default `oauth2`. For GitHub set `x-access-token` | GitLab CI/CD variable `GIT_PUSH_USER`. Not a secret |
+| `GO_VERSION` | Go toolchain for test and image build. Default `1.25`. Match the `go` line in `go.mod` | GitLab CI/CD variable `GO_VERSION`. Optional |
+| `NODE_VERSION` | Node toolchain for frontend test and the SPA build. Default `22` | GitLab CI/CD variable `NODE_VERSION`. Optional |
+| `SPA_DIST` | Frontend build output directory. Default `dist` | GitLab CI/CD variable `SPA_DIST`. Optional |
+| `KUSTOMIZE_VERSION` | Kustomize release the manifest jobs install. Default `5.6.0` | GitLab CI/CD variable `KUSTOMIZE_VERSION`. Optional |
+| `KEYCLOAK_ISSUER` | Issuer URL of the existing realm | `deploy/configmap.yaml`. Replace `https://placeholder.invalid/realms/placeholder-realm`. Not a secret |
+| `KEYCLOAK_CLIENT_ID` | Portal client id in that realm | `deploy/configmap.yaml`. Replace `placeholder-client-id`. Not a secret |
+| `KEYCLOAK_HR_GROUP` | Keycloak group that is HR | `deploy/configmap.yaml`. Replace `placeholder-hr-group`. Not a secret |
+| `SMTP_HOST` | Host of the existing SMTP server | `deploy/configmap.yaml`. Replace `placeholder.invalid`. Not a secret |
+| `SMTP_PORT` | SMTP port | `deploy/configmap.yaml`. Replace `placeholder-smtp-port`. Not a secret |
+| `SMTP_TLS` | TLS mode the worker accepts: `starttls`, `tls`, or `none` | `deploy/configmap.yaml`. Replace `placeholder-smtp-tls`. Not a secret |
+| `SMTP_FROM` | Mail From address | `deploy/configmap.yaml`. Replace `placeholder@placeholder.invalid`. Not a secret |
+| `HTTP_ADDR` | API listen address | `deploy/configmap.yaml`. Value `:8080` |
+| `STATIC_DIR` | SPA files inside the image | `deploy/configmap.yaml`. Value `/app/static` |
+| `LOG_LEVEL` | Log level | `deploy/configmap.yaml`. Value `info` |
+| `placeholder-vault-host.invalid` | Vault API server. The URL in `deploy/secretstore.yaml` is `https://placeholder-vault-host.invalid`. Include the port in that URL when the server uses one | `deploy/secretstore.yaml` `server` |
+| `placeholder-vault-mount` | KV v2 mount name | `deploy/secretstore.yaml` `path` |
+| `placeholder-vault-k8s-auth-mount` | Vault Kubernetes auth mount | `deploy/secretstore.yaml` `auth.kubernetes.mountPath` |
+| `placeholder-vault-role` | Vault role bound to ServiceAccount `bkl-vacation-vault` in the portal namespace | `deploy/secretstore.yaml` `auth.kubernetes.role` |
 | `placeholder-cluster-name` | Name of the cluster as Argo CD has it registered | `deploy/argocd/application.yaml` `destination.name` |
-| `placeholder-namespace` | Kubernetes namespace for the portal | `deploy/kustomization.yaml` `namespace` and `destination.namespace`. Keep the two the same |
+| `placeholder-namespace` | Kubernetes namespace. Keep the Kustomize `namespace` and the Application `destination.namespace` the same | `deploy/kustomization.yaml` and `deploy/argocd/application.yaml` |
 | `placeholder-ingress-class` | Ingress class | `deploy/ingress.yaml` |
 | `placeholder-portal-host.invalid` | Portal DNS name | `deploy/ingress.yaml` host |
-| `https://placeholder.invalid/realms/placeholder-realm` | Keycloak issuer URL of the existing realm | ConfigMap `KEYCLOAK_ISSUER` |
-| `placeholder-client-id` | Keycloak client id | ConfigMap `KEYCLOAK_CLIENT_ID` |
-| `placeholder-hr-group` | Keycloak group that is HR | ConfigMap `KEYCLOAK_HR_GROUP` |
-| `placeholder-smtp-port` | SMTP port | ConfigMap `SMTP_PORT` |
-| `placeholder-smtp-tls` | SMTP TLS mode the worker accepts (`starttls`, `tls`, or `none`) | ConfigMap `SMTP_TLS` |
-| `placeholder@placeholder.invalid` | Mail From address | ConfigMap `SMTP_FROM` |
+| `placeholder-gitlab-group` | GitLab group path | Not a cluster value. The GitLab project that runs `.gitlab-ci.yml` |
+| `placeholder-gitlab-project` | GitLab project path | Same GitLab project |
 
 `metadata.namespace: argocd` on the Application is the upstream Argo CD install namespace. Change it if this cluster's Argo CD lives somewhere else. `spec.project: default` is Argo CD's built-in AppProject. Change it if the portal has its own project.
 
-The Application `repoURL` is the known GitHub repository, `https://github.com/wgh-control/bkl-vacation.git`, revision `main`, path `deploy`. If Argo CD should watch the GitLab project instead, replace `repoURL` once that project exists, and point `GIT_PUSH_URL` at the same remote.
+The Application `repoURL` is `https://github.com/wgh-control/bkl-vacation.git`, revision `main`, path `deploy`. If Argo CD should watch the GitLab project instead, replace `repoURL` once that project exists, and set `GIT_PUSH_URL` to the same remote.
+
+Vault policy for the portal role, once the mount name is real:
+
+```hcl
+path "placeholder-vault-mount/data/bkl-vacation/runtime" {
+  capabilities = ["read"]
+}
+```
+
+The Kubernetes auth role binds `bound_service_account_names` to `bkl-vacation-vault` and `bound_service_account_namespaces` to the portal namespace. A separate CI policy can read `placeholder-vault-mount/data/bkl-vacation/ci` when GitLab's Vault integration replaces `REGISTRY_USER`, `REGISTRY_PASSWORD`, and `GIT_PUSH_TOKEN`. That integration is not enabled in `.gitlab-ci.yml` yet, so those three still come from GitLab CI/CD variables.
+
+If Vault's certificate is signed by a private CA, add that CA on the SecretStore. The bundle is not committed.
 
 ## Git and CI
 
@@ -43,21 +79,7 @@ Stages, in order:
 
 Publish and the tag commit run on the default branch only. They run once `go.mod`, `frontend/package.json`, and `frontend/package-lock.json` are all in the revision. Until those files exist, the pipeline still renders the manifests and leaves the image tag unchanged.
 
-CI/CD variables to set on the GitLab project. Mask `REGISTRY_PASSWORD` and `GIT_PUSH_TOKEN`.
-
-| Variable | Value |
-| --- | --- |
-| `REGISTRY_HOST` | Registry host. Replaces `placeholder.invalid` |
-| `REGISTRY_USER` | Registry user |
-| `REGISTRY_PASSWORD` | Registry password |
-| `IMAGE_NAME` | Repository path under the host. Replaces `placeholder-image-name` |
-| `GIT_PUSH_URL` | HTTPS remote of the git revision Argo CD watches, with no credentials in the URL |
-| `GIT_PUSH_TOKEN` | Token that can push to `GIT_PUSH_URL` |
-| `GIT_PUSH_USER` | Username for that token. Default `oauth2`. For GitHub use `x-access-token` |
-
-With the recommended pull mirror, `GIT_PUSH_URL` is `https://github.com/wgh-control/bkl-vacation.git`. A push back to the GitLab mirror is the wrong remote: a pull mirror will not carry that commit to the revision Argo CD watches.
-
-`GO_VERSION` defaults to `1.25`, `NODE_VERSION` to `22`, and `SPA_DIST` to `dist`. Match `GO_VERSION` to the `go` line in `go.mod`.
+With the recommended pull mirror, `GIT_PUSH_URL` is `https://github.com/wgh-control/bkl-vacation.git`. Push the tag commit to that remote. A push to the GitLab pull mirror does not update the revision Argo CD watches.
 
 Build and publish use Docker-in-Docker (`docker:27`). The runner must allow privileged mode for that service.
 
@@ -75,25 +97,6 @@ The Dockerfile builds `./cmd/api` and `./cmd/worker` from the Go module at the r
 
 The API serves `GET /healthz` and `GET /readyz` on `HTTP_ADDR` (`:8080` in the ConfigMap). `/healthz` answers when the process is up and does not require the database, so liveness does not restart the pod during a database blip. `/readyz` checks Postgres. The same port serves `/api` and the SPA files from `STATIC_DIR` (`/app/static`).
 
-Environment variables:
-
-| Name | Source | Purpose |
-| --- | --- | --- |
-| `HTTP_ADDR` | ConfigMap | API listen address |
-| `STATIC_DIR` | ConfigMap | SPA files |
-| `LOG_LEVEL` | ConfigMap | Log level. Default `info` |
-| `KEYCLOAK_ISSUER` | ConfigMap | Existing realm's issuer URL |
-| `KEYCLOAK_CLIENT_ID` | ConfigMap | Portal client id |
-| `KEYCLOAK_HR_GROUP` | ConfigMap | HR group in that realm |
-| `SMTP_HOST` | ConfigMap | Existing SMTP server |
-| `SMTP_PORT` | ConfigMap | SMTP port |
-| `SMTP_TLS` | ConfigMap | `starttls`, `tls`, or `none` |
-| `SMTP_FROM` | ConfigMap | From address |
-| `DATABASE_URL` | Secret | External Postgres DSN, with TLS |
-| `KEYCLOAK_CLIENT_SECRET` | Secret | Portal client secret |
-| `SMTP_USERNAME` | Secret | SMTP username |
-| `SMTP_PASSWORD` | Secret | SMTP password |
-
 The API Deployment starts at 2 replicas so a rolling update can keep a pod ready. That number is a starting value, not a capacity estimate. The worker starts at 1 replica and uses the `Recreate` strategy. Resource requests and limits are starting values.
 
 When the registry requires a pull credential, add the cluster's pull secret to each Pod spec:
@@ -107,24 +110,27 @@ The secret name is part of the registry decision and is not set here.
 
 ## What Argo CD syncs
 
-`kustomize build deploy` is the desired state. It includes:
+`kustomize build deploy` is the desired state. External Secrets Operator is the Vault integration. Vault Agent Injector is not used: the processes read environment variables, and the image has no shell to source a Vault file.
 
 | Resource | Sync |
 | --- | --- |
-| ServiceAccount `bkl-vacation` and ConfigMap `bkl-vacation` | wave 0 |
+| ServiceAccount `bkl-vacation-vault` | PreSync hook, wave -4 |
+| SecretStore `bkl-vacation-vault` | PreSync hook, wave -3 |
+| ExternalSecret `bkl-vacation` | PreSync hook, wave -2. Writes Secret `bkl-vacation` from Vault and leaves that Secret in place when the hook object is replaced |
 | Migration Job `bkl-vacation-migrate` | PreSync hook, wave -1. Deleted before the next hook run |
+| ServiceAccount `bkl-vacation` and ConfigMap `bkl-vacation` | wave 0 |
 | Deployment `bkl-vacation-api`, Service `bkl-vacation`, Ingress `bkl-vacation` | wave 1 |
 | Deployment `bkl-vacation-worker` | wave 2 |
 
+Argo CD treats a hook as done when the object is Healthy. A ServiceAccount and a SecretStore are Healthy once they exist. An ExternalSecret is Healthy once Vault has filled the Secret only after the platform adds a health check. Merge the contents of `deploy/argocd/external-secret-health.lua` into the existing `argocd-cm` ConfigMap under the data key `resource.customizations.health.external-secrets.io_ExternalSecret`. Do not replace that ConfigMap with a new one. Without the health check, the migration Job can start before Secret `bkl-vacation` exists.
+
+The ExternalSecret refreshes from Vault every hour. A running pod keeps the environment it started with, so a rotated value is picked up on the next pod start.
+
 The Service is ClusterIP. The Ingress sends `/` to it, so the SPA and the API share one host. Add a TLS section on the Ingress when the certificate and the DNS name exist. Neither is set here.
 
-The API, worker, and migration pods need egress to cluster DNS, the external Postgres, the existing Keycloak, and the existing SMTP server.
+The API, worker, and migration pods need egress to cluster DNS, the external Postgres, the existing Keycloak, and the existing SMTP server. They do not call Vault. External Secrets Operator needs a path to the Vault server.
 
-Pods run as uid 65532 with a read-only root filesystem and a dropped capability set. They do not mount a Kubernetes API token.
-
-## Secret
-
-Create Secret `bkl-vacation` in the portal namespace before the first sync. `deploy/examples/secret.yaml` lists the keys. It is not in the Kustomize build. How the Secret is delivered (Sealed Secrets, External Secrets, or another mechanism already on the cluster) waits on the cluster decision.
+Pods run as uid 65532 with a read-only root filesystem and a dropped capability set. They do not mount a Kubernetes API token. External Secrets uses the TokenRequest API for ServiceAccount `bkl-vacation-vault`, so that account does not mount a token either.
 
 ## Argo CD Application
 
@@ -134,8 +140,8 @@ Create Secret `bkl-vacation` in the portal namespace before the first sync. `dep
 kubectl apply -f deploy/argocd/application.yaml
 ```
 
-Installing Argo CD, when it is not already on the cluster, is a platform prerequisite.
+The committed sync policy is automated, with `prune: false` and `selfHeal: false`. After the first production sync has been reviewed by hand, set `selfHeal: true`. Leave `prune` false through that review. Secret `bkl-vacation` is created by External Secrets with `creationPolicy: Orphan` and `deletionPolicy: Retain`, so replacing the ExternalSecret hook does not delete it.
 
-The committed sync policy is automated, with `prune: false` and `selfHeal: false`. After the first production sync has been reviewed by hand, set `selfHeal: true`. Leave `prune` false through that review. Prune only removes objects this Application used to manage. The out-of-band Secret is not one of those objects.
+The namespace is not created by this Application. Create the portal namespace before the first sync.
 
-The namespace is not created by this Application. Create `placeholder-namespace` (the real name, once chosen) before the first sync.
+`deploy/examples/secret.yaml` only names the runtime keys. It is not applied.

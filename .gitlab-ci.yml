@@ -15,11 +15,16 @@
 # image-tag job pushes to, so the tag commit lands on the revision Argo CD
 # watches. With the pull mirror, that remote is the GitHub repository.
 #
-# Set these CI/CD variables before publish and image-tag can succeed.
-# Mark the token and password masked.
-#   REGISTRY_HOST, REGISTRY_USER, REGISTRY_PASSWORD, IMAGE_NAME
-#   GIT_PUSH_URL, GIT_PUSH_TOKEN
+# Every required variable is listed in deploy/README.md.
+# This pipeline reads the GitLab CI/CD variables in the variables block
+# below, plus REGISTRY_USER, REGISTRY_PASSWORD, and GIT_PUSH_TOKEN.
+# Mark REGISTRY_PASSWORD and GIT_PUSH_TOKEN masked.
 # GIT_PUSH_USER defaults to oauth2. For a GitHub remote, set x-access-token.
+#
+# Runtime secrets are not read here and are not baked into the image.
+# Vault KV bkl-vacation/runtime is the source. Until Vault is connected,
+# create masked GitLab CI/CD variables with the same names:
+#   DATABASE_URL, KEYCLOAK_CLIENT_SECRET, SMTP_USERNAME, SMTP_PASSWORD
 #
 # Build and publish use Docker-in-Docker. The runner must allow privileged
 # mode for that service.
@@ -134,12 +139,26 @@ manifests:
       grep -q 'name: bkl-vacation-api' "$rendered"
       grep -q 'name: bkl-vacation-worker' "$rendered"
       grep -q 'name: bkl-vacation-migrate' "$rendered"
+      grep -q 'kind: ExternalSecret' "$rendered"
+      grep -q 'kind: SecretStore' "$rendered"
+      grep -q 'name: bkl-vacation-vault' "$rendered"
+      grep -q 'placeholder-vault-host.invalid' "$rendered"
+      grep -q 'key: bkl-vacation/runtime' "$rendered"
+      hooks=$(grep -c 'argocd.argoproj.io/hook: PreSync' "$rendered")
+      if [ "$hooks" -ne 4 ]; then
+        echo "expected 4 PreSync hooks, found $hooks"
+        exit 1
+      fi
+      if grep -qE '^kind: Secret$' "$rendered"; then
+        echo "the Kubernetes Secret is created from Vault and is not committed"
+        exit 1
+      fi
       if grep -q 'argoproj.io/v1alpha1' "$rendered"; then
         echo "the Argo CD Application is applied once and is not part of this build"
         exit 1
       fi
       if grep -q 'placeholder-database-url' "$rendered"; then
-        echo "the example Secret is not part of this build"
+        echo "secret values do not belong in the rendered manifests"
         exit 1
       fi
 
