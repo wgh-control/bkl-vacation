@@ -1,0 +1,1028 @@
+openapi: 3.0.3
+info:
+  title: BKL vacation portal API
+  version: 0.1.0
+  description: |
+    Go API for vacation, day off, and sick requests. Balances are per working
+    year counted from the hire date (Labor Code articles 121 and 122). The
+    employee client area also reports planned, approved, and moved vacation
+    days by calendar year: every past year that has activity, the previous
+    year, the current year, and the next year. A vacation may be planned for
+    the next calendar year and not beyond it.
+
+    HR is an employee. The HR group uses the HR routes and the same employee
+    routes to submit their own vacation, day off, and sick requests.
+
+    Errors are JSON objects with a stable `code` and a short English `message`.
+    The UI translates `code`.
+servers:
+  - url: /api
+tags:
+  - name: employee
+  - name: manager
+  - name: hr
+  - name: meta
+paths:
+  /healthz:
+    get:
+      tags: [meta]
+      summary: Liveness
+      security: []
+      responses:
+        "200":
+          description: Process is up
+  /readyz:
+    get:
+      tags: [meta]
+      summary: Readiness, including Postgres
+      security: []
+      responses:
+        "200":
+          description: Ready
+        "503":
+          $ref: "#/components/responses/Error"
+  /openapi.yaml:
+    get:
+      tags: [meta]
+      summary: This document
+      security: []
+      responses:
+        "200":
+          description: OpenAPI YAML
+  /me:
+    get:
+      tags: [employee]
+      summary: Signed-in employee, including when they are also HR
+      responses:
+        "200":
+          description: Profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "401":
+          $ref: "#/components/responses/Error"
+    patch:
+      tags: [employee]
+      summary: Set UI language. Mail uses the same preference.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [locale]
+              properties:
+                locale:
+                  type: string
+                  enum: [ru, en]
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "400":
+          $ref: "#/components/responses/Error"
+  /calendar:
+    get:
+      tags: [employee]
+      summary: Production calendar
+      parameters:
+        - $ref: "#/components/parameters/from"
+        - $ref: "#/components/parameters/to"
+      responses:
+        "200":
+          description: Days
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [days]
+                properties:
+                  days:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CalendarDay"
+  /balance:
+    get:
+      tags: [employee]
+      summary: Working-year balances and calendar-year day buckets
+      description: |
+        `working_years` is the balance (28 days plus any HR extra, per working year).
+        `calendar_years` repeats the employee year view from `/me/days`.
+      responses:
+        "200":
+          description: Balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Balance"
+  /me/days:
+    get:
+      tags: [employee]
+      summary: Planned, approved, and moved vacation days by calendar year
+      description: |
+        Includes past years, the current year, and next year. `planned_days` are
+        vacation days still in draft or pending. `approved_days` are vacation days
+        on scheduled, confirmed, or processed requests. `moved_days` are vacation
+        days that belong to a reschedule; they also sit in planned or approved
+        until the old dates are released, and `moved_away_days` counts dates that
+        already left that year. Day offs and sick days are reported separately
+        and do not consume the 28.
+      responses:
+        "200":
+          description: Year buckets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/YearSummary"
+  /me/notices:
+    get:
+      tags: [employee]
+      summary: In-portal notices
+      responses:
+        "200":
+          description: Notices
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [notices]
+                properties:
+                  notices:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Notice"
+  /me/notices/{id}/read:
+    post:
+      tags: [employee]
+      summary: Mark a notice read
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "204":
+          description: Marked
+        "404":
+          $ref: "#/components/responses/Error"
+  /day-off-reasons:
+    get:
+      tags: [employee]
+      summary: Day-off reason catalog
+      responses:
+        "200":
+          description: Reasons
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reasons:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Reason"
+  /requests:
+    get:
+      tags: [employee]
+      summary: Own requests, for every role including HR
+      responses:
+        "200":
+          description: Requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requests]
+                properties:
+                  requests:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Request"
+    post:
+      tags: [employee]
+      summary: Submit a vacation, day off, or sick request
+      description: |
+        The caller is the employee, including when the caller is HR.
+        Vacation and day off dates must fall in the current calendar year or the
+        next one. Sick dates may start up to one year in the past.
+        A vacation that would make a 14-day part impossible is rejected
+        (`streak_impossible`). Holidays inside the range are not counted and do
+        not break the streak. Weekends are counted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+        "400":
+          $ref: "#/components/responses/Error"
+  /requests/{id}:
+    get:
+      tags: [employee]
+      summary: One request visible to the owner, their manager, or HR
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /requests/{id}/cancel:
+    post:
+      tags: [employee]
+      summary: Cancel until the request is processed
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+        "409":
+          $ref: "#/components/responses/Error"
+  /requests/{id}/reschedule:
+    post:
+      tags: [employee]
+      summary: Propose new dates. Manager approval, then HR approval, is required again.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestInput"
+      responses:
+        "200":
+          description: Successor request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+        "400":
+          $ref: "#/components/responses/Error"
+  /requests/{id}/confirm:
+    post:
+      tags: [employee]
+      summary: Confirm inside the 3–5 day window. A late confirmation is still accepted.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: Confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+        "409":
+          $ref: "#/components/responses/Error"
+  /requests/{id}/acknowledge:
+    post:
+      tags: [employee]
+      summary: Acknowledge the two-week start notice
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: Acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+  /requests/{id}/certificate:
+    post:
+      tags: [employee]
+      summary: Add a sick-certificate number before HR decides
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [certificate_number]
+              properties:
+                certificate_number:
+                  type: string
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+  /requests/{id}/overlap-choice:
+    post:
+      tags: [employee]
+      summary: Extend the vacation or take the restored days later
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [choice]
+              properties:
+                choice:
+                  type: string
+                  enum: [extend, postpone]
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+  /approvals:
+    get:
+      tags: [manager]
+      summary: Direct reports waiting on the caller
+      responses:
+        "200":
+          description: Queue
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [approvals]
+                properties:
+                  approvals:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/QueueItem"
+  /approvals/{id}/decision:
+    post:
+      tags: [manager, hr]
+      summary: Approve or reject the current step
+      description: |
+        The caller must be the employee's current manager while the request is
+        `pending_manager`, or a member of the HR group while it is `pending_hr`.
+        If the request skipped the manager, a different HR person must decide.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision:
+                  type: string
+                  enum: [approve, reject]
+                comment:
+                  type: string
+      responses:
+        "200":
+          description: Updated request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /team/requests:
+    get:
+      tags: [manager]
+      summary: Requests of direct reports
+      responses:
+        "200":
+          description: Requests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Request"
+  /hr/queue:
+    get:
+      tags: [hr]
+      summary: HR approval queue
+      description: Requests in `pending_hr`, with the person, department, manager decision, dates, and counted days.
+      responses:
+        "200":
+          description: Queue
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [queue]
+                properties:
+                  queue:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/QueueItem"
+        "403":
+          $ref: "#/components/responses/Error"
+  /hr/requests/{id}/processed:
+    post:
+      tags: [hr]
+      summary: Mark a confirmed vacation processed
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: Processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+        "409":
+          $ref: "#/components/responses/Error"
+  /hr/export:
+    get:
+      tags: [hr]
+      summary: PDF, XLS, XLSX, or CSV export
+      description: |
+        Scope is one user (`user_id`), one department (`department_id`), or `all`.
+        Without `from` and `to`, the file is current approved requests whose end
+        date is today or later. With both dates, it is approved requests that
+        overlap that range. Header labels follow the HR user's language.
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [user, department, all]
+        - name: user_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: department_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: format
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [pdf, xls, xlsx, csv]
+        - $ref: "#/components/parameters/from"
+        - $ref: "#/components/parameters/to"
+      responses:
+        "200":
+          description: File
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+            application/vnd.ms-excel:
+              schema:
+                type: string
+                format: binary
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /hr/warnings:
+    get:
+      tags: [hr]
+      summary: Carryover and two-year warnings
+      responses:
+        "200":
+          description: Warnings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  warnings:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Warning"
+  /hr/calendar:
+    put:
+      tags: [hr]
+      summary: Store a transfer or a regional holiday
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date, kind, source]
+              properties:
+                date:
+                  type: string
+                  format: date
+                kind:
+                  type: string
+                  enum: [work, weekend, holiday, transferred]
+                name:
+                  type: string
+                source:
+                  type: string
+      responses:
+        "200":
+          description: Stored day
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarDay"
+  /hr/employees/{id}/entitlement:
+    post:
+      tags: [hr]
+      summary: Extra days above 28, and an early-leave exception
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [extra_days, early_leave]
+              properties:
+                extra_days:
+                  type: integer
+                  minimum: 0
+                early_leave:
+                  type: boolean
+      responses:
+        "200":
+          description: Profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+  /hr/schedule/lock:
+    post:
+      tags: [hr]
+      summary: Lock the annual schedule for a calendar year
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [year]
+              properties:
+                year:
+                  type: integer
+      responses:
+        "200":
+          description: Lock
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleLock"
+  /hr/schedule:
+    get:
+      tags: [hr]
+      summary: Whether a calendar year is locked
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lock
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleLock"
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    from:
+      name: from
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+    to:
+      name: to
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+  responses:
+    Error:
+      description: Stable error code
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: |
+            Stable codes include unauthorized, forbidden, not_found, validation,
+            overlap, streak_impossible, empty_range, balance, first_six_months,
+            planning_horizon, hire_date_required, certificate_required,
+            overlap_choice_required, confirmation_too_early, cannot_cancel,
+            self_approval, reason_mandatory, invalid_status, export_scope,
+            crosses_working_year, move_pending, locale, inactive.
+        message:
+          type: string
+    Profile:
+      type: object
+      required: [id, subject, display_name, locale, active, hr, manager_of_others, extra_days, early_leave]
+      properties:
+        id:
+          type: string
+        subject:
+          type: string
+        display_name:
+          type: string
+        email:
+          type: string
+        locale:
+          type: string
+          enum: [ru, en]
+        employee_number:
+          type: string
+        position:
+          type: string
+        department:
+          $ref: "#/components/schemas/Ref"
+        manager:
+          $ref: "#/components/schemas/Ref"
+        hire_date:
+          type: string
+          format: date
+        active:
+          type: boolean
+        hr:
+          type: boolean
+        manager_of_others:
+          type: boolean
+        extra_days:
+          type: integer
+        early_leave:
+          type: boolean
+    Ref:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    WorkingYear:
+      type: object
+      required: [starts_on, ends_on, granted_days, extra_days, accrued_days, used_days, reserved_days, free_days, streak_satisfied, streak_possible]
+      properties:
+        starts_on:
+          type: string
+          format: date
+        ends_on:
+          type: string
+          format: date
+        granted_days:
+          type: integer
+          description: Annual basic grant, 28 unless a later rule changes the base.
+        extra_days:
+          type: integer
+        accrued_days:
+          type: number
+          description: Display fraction of the grant. Payroll rounding is not settled.
+        accrued_numerator:
+          type: integer
+        accrued_denominator:
+          type: integer
+        accrued_adjustment:
+          type: number
+          description: Negative when unpaid leave exceeds 14 calendar days in the working year.
+        used_days:
+          type: integer
+        reserved_days:
+          type: integer
+        free_days:
+          type: integer
+        advance_days:
+          type: number
+        streak_satisfied:
+          type: boolean
+        streak_possible:
+          type: boolean
+        carryover_warning:
+          type: boolean
+        carryover_deadline:
+          type: string
+          format: date
+        two_year_warning:
+          type: boolean
+        unpaid_calendar_days:
+          type: integer
+        unpaid_excess_days:
+          type: integer
+    YearDays:
+      type: object
+      required: [year, relation, planned_days, approved_days, moved_days]
+      properties:
+        year:
+          type: integer
+        relation:
+          type: string
+          enum: [past, current, next]
+        planned_days:
+          type: integer
+        approved_days:
+          type: integer
+        moved_days:
+          type: integer
+        moved_away_days:
+          type: integer
+        day_off_days:
+          type: integer
+        sick_days:
+          type: integer
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/YearEntry"
+    YearEntry:
+      type: object
+      properties:
+        request_id:
+          type: string
+        type:
+          type: string
+          enum: [vacation, day_off, sick]
+        status:
+          type: string
+        starts_on:
+          type: string
+          format: date
+        ends_on:
+          type: string
+          format: date
+        days:
+          type: integer
+        bucket:
+          type: string
+          enum: [planned, approved, moved_away]
+        reschedule:
+          type: boolean
+    YearSummary:
+      type: object
+      required: [as_of, years]
+      properties:
+        as_of:
+          type: string
+          format: date
+        years:
+          type: array
+          items:
+            $ref: "#/components/schemas/YearDays"
+    Balance:
+      type: object
+      required: [working_years, calendar_years]
+      properties:
+        working_years:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkingYear"
+        calendar_years:
+          type: array
+          items:
+            $ref: "#/components/schemas/YearDays"
+    Request:
+      type: object
+      required: [id, type, status, employee_id, starts_on, ends_on, counted_days, created_at]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [vacation, day_off, sick]
+        status:
+          type: string
+          enum: [draft, pending_manager, pending_hr, scheduled, awaiting_confirmation, confirmed, processed, rejected, cancelled]
+        employee_id:
+          type: string
+        starts_on:
+          type: string
+          format: date
+        ends_on:
+          type: string
+          format: date
+        counted_days:
+          type: integer
+        reason_code:
+          type: string
+        certificate_number:
+          type: string
+        replaces_request_id:
+          type: string
+        successor_request_id:
+          type: string
+        cancel_reason:
+          type: string
+        overlap_choice:
+          type: string
+          enum: [extend, postpone]
+        manager_vacant:
+          type: boolean
+        self_approval:
+          type: boolean
+        needs_confirmation:
+          type: boolean
+        pay_by_warning:
+          type: boolean
+        pay_by_date:
+          type: string
+          format: date
+        statutory_pay_by_date:
+          type: string
+          format: date
+        working_year_start:
+          type: string
+          format: date
+        working_year_end:
+          type: string
+          format: date
+        acknowledged_at:
+          type: string
+          format: date-time
+        confirmed_at:
+          type: string
+          format: date-time
+        processed_at:
+          type: string
+          format: date-time
+        processed_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    RequestInput:
+      type: object
+      required: [type, starts_on]
+      properties:
+        type:
+          type: string
+          enum: [vacation, day_off, sick]
+        starts_on:
+          type: string
+          format: date
+        ends_on:
+          type: string
+          format: date
+        counted_days:
+          type: integer
+          description: Used when ends_on is omitted on a vacation. The end date moves past holidays.
+        reason_code:
+          type: string
+        certificate_number:
+          type: string
+        overlap_choice:
+          type: string
+          enum: [extend, postpone]
+    QueueItem:
+      allOf:
+        - $ref: "#/components/schemas/Request"
+        - type: object
+          properties:
+            employee_name:
+              type: string
+            employee_number:
+              type: string
+            department:
+              type: string
+            position:
+              type: string
+            manager_decision:
+              type: object
+              properties:
+                decision:
+                  type: string
+                comment:
+                  type: string
+                at:
+                  type: string
+                  format: date-time
+                actor_id:
+                  type: string
+    Notice:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        request_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        read_at:
+          type: string
+          format: date-time
+    Reason:
+      type: object
+      properties:
+        code:
+          type: string
+        unpaid:
+          type: boolean
+        manager_must_grant:
+          type: boolean
+        max_calendar_days:
+          type: integer
+    CalendarDay:
+      type: object
+      required: [date, kind, name, source]
+      properties:
+        date:
+          type: string
+          format: date
+        kind:
+          type: string
+          enum: [work, weekend, holiday, transferred]
+        name:
+          type: string
+        source:
+          type: string
+    Warning:
+      type: object
+      properties:
+        employee_id:
+          type: string
+        employee_name:
+          type: string
+        department:
+          type: string
+        code:
+          type: string
+          enum: [carryover, two_years]
+        working_year_start:
+          type: string
+          format: date
+        message:
+          type: string
+    ScheduleLock:
+      type: object
+      properties:
+        year:
+          type: integer
+        locked:
+          type: boolean
+        locked_by:
+          type: string
+        locked_at:
+          type: string
+          format: date-time
+security:
+  - bearer: []
