@@ -30,4 +30,4 @@ The client in Keycloak is a public client with the standard authorization-code f
 
 ## Brand
 
-Leon red `#d71015`, yellow `#fdc000`, and the wordmark come from https://leon.graphics/. The shell is a light liquid-glass window (macOS traffic lights, large radii) on a warm stage. The stage photo is the guideline plate: a black-and-white ground with one person left in color, plus an ASCII texture. The signed-in name is white and the role is yellow. Interface type follows the system UI font, with Roboto as the bundled fallback (Apache license in `src/assets/fonts/Roboto-LICENSE.txt`).
+Leon red `#d71015`, yellow `#fdc000`, black `#0C1013`, and greys `#33363C` and `#6B737C` come from https://leon.graphics/. The shell is a liquid-glass window (macOS traffic lights, large radii, blur) on a cold black-and-grey stage. The stage photo is half transparent: a black-and-white ground with one man left in color, plus an ASCII texture. The signed-in name is white and the role is yellow. Interface type follows the system UI font, with Roboto as the bundled fallback (Apache license in `src/assets/fonts/Roboto-LICENSE.txt`).
