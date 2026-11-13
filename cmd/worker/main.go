@@ -8,10 +8,9 @@ import (
 	"syscall"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/wgh-control/bkl-vacation/internal/app"
 	"github.com/wgh-control/bkl-vacation/internal/config"
-	"github.com/wgh-control/bkl-vacation/internal/notify"
 	"github.com/wgh-control/bkl-vacation/internal/org"
-	"github.com/wgh-control/bkl-vacation/internal/portal"
 	"github.com/wgh-control/bkl-vacation/internal/store"
 	"github.com/wgh-control/bkl-vacation/internal/worker"
 )
@@ -31,7 +30,7 @@ func main() {
 	}
 	defer pool.Close()
 	repo := store.NewPostgres(pool)
-	svc := portal.New(repo, cfg.KeycloakHRGroup, cfg.Claims)
+	mods := app.Modules(app.NewServices(cfg, repo))
 	var directory org.Directory
 	if cfg.KeycloakAdminClientID != "" && cfg.KeycloakIssuer != "" {
 		directory = &org.Keycloak{
@@ -39,16 +38,9 @@ func main() {
 			ClientSecret: cfg.KeycloakAdminClientSecret, HRGroup: cfg.KeycloakHRGroup, Claims: cfg.Claims,
 		}
 	}
-	var mail notify.Sender
-	if cfg.SMTPHost != "" && cfg.SMTPFrom != "" {
-		mail = notify.SMTP{
-			Host: cfg.SMTPHost, Port: cfg.SMTPPort, Mode: cfg.SMTPTLS,
-			User: cfg.SMTPUser, Password: cfg.SMTPPassword, From: cfg.SMTPFrom,
-		}
-	}
 	w := &worker.Worker{
-		Svc: svc, Repo: repo, Directory: directory, Mail: mail,
-		SyncEvery: cfg.SyncInterval, NotifyEvery: cfg.NotifyInterval,
+		Svc: app.Vacation(mods), Repo: repo, Directory: directory, Mail: app.Mail(cfg),
+		Modules: mods, SyncEvery: cfg.SyncInterval, NotifyEvery: cfg.NotifyInterval,
 	}
 	slog.Info("worker started")
 	w.Run(ctx)

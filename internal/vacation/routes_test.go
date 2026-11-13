@@ -1,4 +1,4 @@
-package httpserver
+package vacation
 
 import (
 	"bytes"
@@ -14,7 +14,7 @@ import (
 	"github.com/wgh-control/bkl-vacation/internal/config"
 	"github.com/wgh-control/bkl-vacation/internal/identity"
 	"github.com/wgh-control/bkl-vacation/internal/notify"
-	"github.com/wgh-control/bkl-vacation/internal/portal"
+	"github.com/wgh-control/bkl-vacation/internal/platform"
 	"github.com/wgh-control/bkl-vacation/internal/store"
 )
 
@@ -46,17 +46,21 @@ func (e jsonError) Error() string { return string(e) }
 
 func TestEmployeeAndHRRoutes(t *testing.T) {
 	mem := store.NewMemory()
-	svc := portal.New(mem, "hr", config.ClaimNames{
-		HireDate: "hire_date", Manager: "manager", Department: "department", EmployeeNumber: "employee_number",
-	})
-	svc.Now = func() time.Time { return time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC) }
 	box := &sentMail{}
-	svc.Mail = box
-	svc.FinanceEmail = "payroll@example.com"
-	srv := &Server{Svc: svc, Auth: headerAuth{}, Ready: mem.Ping}
-	h := srv.Handler()
+	mod := New(mem, "hr", config.ClaimNames{
+		HireDate: "hire_date", Manager: "manager", Department: "department", EmployeeNumber: "employee_number",
+	}, box, "payroll@example.com")
+	mod.Svc.Now = func() time.Time { return time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC) }
+	h := platform.Handler(platform.Deps{
+		Auth: headerAuth{}, Ready: mem.Ping, OpenAPI: api.OpenAPI, Modules: []platform.Module{mod},
+	})
 
 	do(t, h, http.MethodGet, "/api/healthz", "", nil, http.StatusOK)
+	do(t, h, http.MethodGet, "/api/readyz", "", nil, http.StatusOK)
+	spec := do(t, h, http.MethodGet, "/api/openapi.yaml", "", nil, http.StatusOK)
+	if !strings.Contains(spec, "/hr/export") {
+		t.Fatal("openapi route")
+	}
 	rec := do(t, h, http.MethodGet, "/api/me", "", map[string]string{"X-Sub": "mgr", "X-Name": "Mia"}, http.StatusOK)
 	if !strings.Contains(rec, `"hr":false`) {
 		t.Fatal(rec)

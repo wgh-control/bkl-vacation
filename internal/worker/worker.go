@@ -8,16 +8,19 @@ import (
 
 	"github.com/wgh-control/bkl-vacation/internal/notify"
 	"github.com/wgh-control/bkl-vacation/internal/org"
+	"github.com/wgh-control/bkl-vacation/internal/platform"
 	"github.com/wgh-control/bkl-vacation/internal/portal"
 	"github.com/wgh-control/bkl-vacation/internal/store"
 )
 
 // Worker is the second process. A Postgres advisory lock keeps a second replica from double-sending.
+// Directory sync is shared. Mail is dispatched once per registered module.
 type Worker struct {
 	Svc         *portal.Service
 	Repo        store.Repo
 	Directory   org.Directory
 	Mail        notify.Sender
+	Modules     []platform.Module
 	SyncEvery   time.Duration
 	NotifyEvery time.Duration
 	Log         *slog.Logger
@@ -59,7 +62,7 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 func (w *Worker) sync(ctx context.Context) {
-	if w.Directory == nil {
+	if w.Directory == nil || w.Svc == nil {
 		return
 	}
 	ok, err := w.Repo.WithAdvisoryLock(ctx, func(ctx context.Context) error {
@@ -88,6 +91,12 @@ func (w *Worker) sync(ctx context.Context) {
 
 func (w *Worker) notify(ctx context.Context) {
 	ok, err := w.Repo.WithAdvisoryLock(ctx, func(ctx context.Context) error {
+		if len(w.Modules) > 0 {
+			return platform.DispatchAll(ctx, w.Modules, w.Mail)
+		}
+		if w.Svc == nil {
+			return nil
+		}
 		return w.Svc.Dispatch(ctx, w.Mail)
 	})
 	if err != nil {
