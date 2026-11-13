@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import logo from '../assets/brand/logo-dark.png'
+import { ShirtLogo } from '../shell/background-logo'
 
 export function Stage({ children }: { children: ReactNode }) {
   return (
@@ -7,6 +8,7 @@ export function Stage({ children }: { children: ReactNode }) {
       <div className="stage-photo" aria-hidden="true" />
       <div className="stage-wash" aria-hidden="true" />
       <div className="stage-ascii" aria-hidden="true" />
+      <ShirtLogo />
       {children}
     </div>
   )

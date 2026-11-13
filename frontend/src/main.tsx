@@ -5,6 +5,7 @@ import { App } from './App'
 import { AuthGate } from './auth/AuthGate'
 import { I18nProvider } from './i18n/context'
 import './styles/global.css'
+import './shell/background-logo.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
