@@ -3,9 +3,11 @@ import { NavLink, Outlet } from 'react-router-dom'
 import type { Language, Me, Role } from '../api/types'
 import { useI18n } from '../i18n/context'
 import { MeProvider, useSession } from '../session'
+import { useAreas } from '../shell/registry'
 import { BrandMark, Stage, TrafficLights } from './WindowChrome'
 
 export function Shell() {
+  const areas = useAreas()
   const { api, preview, logout } = useSession()
   const { t, language, setLanguage } = useI18n()
   const [me, setMe] = useState<Me | null>(null)
@@ -55,19 +57,21 @@ export function Shell() {
           </NavLink>
           {me ? (
             <nav className="nav" aria-label="LEON">
-              <NavLink to="/" end data-testid="nav-employee">
-                {t('nav.employee')}
-              </NavLink>
-              {me.roles.includes('manager') ? (
-                <NavLink to="/team" data-testid="nav-manager">
-                  {t('nav.manager')}
-                </NavLink>
-              ) : null}
-              {me.roles.includes('hr') ? (
-                <NavLink to="/hr" data-testid="nav-hr">
-                  {t('nav.hr')}
-                </NavLink>
-              ) : null}
+              {areas.flatMap((area) =>
+                area.nav
+                  .filter((item) => (item.visible ? item.visible(me) : true))
+                  .map((item) => (
+                    <NavLink
+                      key={`${area.id}:${item.to}`}
+                      to={item.to}
+                      end={item.end}
+                      data-testid={item.testId}
+                      data-area={area.id}
+                    >
+                      {t(item.label)}
+                    </NavLink>
+                  )),
+              )}
             </nav>
           ) : (
             <span className="nav" />

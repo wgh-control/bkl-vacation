@@ -4,16 +4,18 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { App } from './App'
 import { createFixtureApi, type FixtureApi } from './api/fixture'
+import { vacationArea } from './areas/vacation'
 import { I18nProvider } from './i18n/context'
 import { SessionProvider } from './session'
+import type { PortalArea } from './shell/types'
 
-function renderPortal(path = '/') {
+function renderPortal(path = '/', areas?: readonly PortalArea[]) {
   const api: FixtureApi = createFixtureApi({ today: '2026-11-13' })
   const view = render(
     <I18nProvider initial="ru">
       <SessionProvider value={{ api, preview: { setRoles: (roles) => api.setRoles(roles) }, logout: () => undefined }}>
         <MemoryRouter initialEntries={[path]}>
-          <App />
+          <App areas={areas} />
         </MemoryRouter>
       </SessionProvider>
     </I18nProvider>,
@@ -86,6 +88,36 @@ describe('portal areas', () => {
 
     await user.click(screen.getByTestId('nav-employee'))
     expect(await screen.findByTestId('employee-area')).toBeTruthy()
+  })
+
+  it('adds a route and a nav entry from another area', async () => {
+    const user = userEvent.setup()
+    const education: PortalArea = {
+      id: 'education',
+      nav: [{ to: '/education', end: true, testId: 'nav-education', label: 'nav.reports' }],
+      routes: [{ path: 'education', element: <h1>Education requests</h1> }],
+    }
+    renderPortal('/', [vacationArea, education])
+    const educationNav = await screen.findByTestId('nav-education')
+    expect(educationNav.getAttribute('data-area')).toBe('education')
+    expect(educationNav.textContent).toBe('Отчёты')
+    expect(screen.getByTestId('nav-employee').getAttribute('data-area')).toBe('vacation')
+    expect(screen.getByTestId('nav-hr')).toBeTruthy()
+
+    await user.click(educationNav)
+    expect(await screen.findByRole('heading', { name: 'Education requests' })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'EN' }))
+    expect(screen.getByTestId('nav-education').textContent).toBe('Reports')
+    await user.click(screen.getByTestId('nav-employee'))
+    expect(await screen.findByTestId('employee-area')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'My area' })).toBeTruthy()
+
+    await user.click(screen.getByTestId('nav-hr'))
+    expect(await screen.findByTestId('hr-area')).toBeTruthy()
+    await user.click(screen.getByTestId('preview-role-hr'))
+    await waitFor(() => expect(screen.queryByTestId('nav-hr')).toBeNull())
+    expect(screen.getByTestId('nav-education')).toBeTruthy()
+    expect(screen.getByTestId('nav-employee')).toBeTruthy()
   })
 
   it('hides the HR area when the signed-in person is only an employee', async () => {
