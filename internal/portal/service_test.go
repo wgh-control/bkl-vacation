@@ -2,6 +2,7 @@ package portal
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -574,6 +575,76 @@ type failMail struct{}
 
 func (failMail) Send(context.Context, notify.Message) error {
 	return notify.ErrNotConfigured
+}
+
+type captureMail struct {
+	msgs []notify.Message
+}
+
+func (c *captureMail) Send(_ context.Context, msg notify.Message) error {
+	c.msgs = append(c.msgs, msg)
+	return nil
+}
+
+func TestWorkflowMail(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	mgr := person("mgr", "Mia", "")
+	hr := person("hr", "Ira", "mgr", "hr")
+	emp := person("emp", "Ada", "mgr")
+	for _, p := range []identity.Principal{mgr, hr, emp} {
+		if _, err := svc.Me(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	req, err := svc.CreateRequest(ctx, emp, CreateInput{Type: "vacation", StartsOn: "2027-06-15", EndsOn: "2027-06-28"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kinds []string
+	if err := svc.Repo.View(ctx, func(q store.Queries) error {
+		due, err := q.ListUnsentDue(ctx, svc.Now())
+		for _, n := range due {
+			if n.RequestID == req.ID {
+				kinds = append(kinds, n.Kind)
+			}
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !hasKind(kinds, "submitted") || !hasKind(kinds, "approval_needed_manager") || hasKind(kinds, "approval_needed_hr") {
+		t.Fatalf("%v", kinds)
+	}
+	off, err := svc.CreateRequest(ctx, emp, CreateInput{Type: "day_off", StartsOn: "2026-12-14", EndsOn: "2026-12-14", ReasonCode: "compensatory_overtime"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Decide(ctx, mgr, off.ID, DecisionInput{Decision: "reject", Comment: "no"}); err != nil {
+		t.Fatal(err)
+	}
+	box := &captureMail{}
+	if err := svc.Dispatch(ctx, box); err != nil {
+		t.Fatal(err)
+	}
+	var declined notify.Message
+	for _, msg := range box.msgs {
+		if strings.Contains(msg.Subject, "отклонена") {
+			declined = msg
+		}
+	}
+	if declined.HTML == "" || !strings.Contains(declined.HTML, "#f4f1eb") || !strings.Contains(declined.Body, "отгул") {
+		t.Fatalf("%+v", declined)
+	}
+}
+
+func hasKind(kinds []string, want string) bool {
+	for _, k := range kinds {
+		if k == want {
+			return true
+		}
+	}
+	return false
 }
 
 func mustErr(v any, err error) error { return err }

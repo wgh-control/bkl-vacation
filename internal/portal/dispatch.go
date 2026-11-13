@@ -50,7 +50,7 @@ func (s *Service) Dispatch(ctx context.Context, sender notify.Sender) error {
 			if err != nil {
 				return err
 			}
-			if closed(req.Status) || skipReminder(n.Kind, req) {
+			if holdMail(n.Kind, req) {
 				now := s.now()
 				n.SentAt = &now
 				n.LastError = "skipped"
@@ -63,7 +63,11 @@ func (s *Service) Dispatch(ctx context.Context, sender notify.Sender) error {
 			if err != nil {
 				return err
 			}
-			content := notify.Compose(n.Kind, n.Language, owner.DisplayName, req.StartsOn.Format("2006-01-02"), req.EndsOn.Format("2006-01-02"))
+			content := notify.Render(notify.Vars{
+				Kind: n.Kind, Locale: n.Language, Employee: owner.DisplayName,
+				Start: req.StartsOn.Format("2006-01-02"), End: req.EndsOn.Format("2006-01-02"),
+				Type: string(req.Type), Moved: req.ReplacesID != "",
+			})
 			if !n.NoticeCreated {
 				if err := q.InsertNotice(ctx, model.Notice{
 					ID: s.id(), EmployeeID: n.RecipientEmployeeID, RequestID: req.ID, NotificationID: n.ID,
@@ -83,7 +87,7 @@ func (s *Service) Dispatch(ctx context.Context, sender notify.Sender) error {
 			if err := q.UpdateNotification(ctx, n); err != nil {
 				return err
 			}
-			batch = append(batch, outbound{note: n, msg: notify.Message{To: n.RecipientEmail, Subject: content.Subject, Body: content.Body}})
+			batch = append(batch, outbound{note: n, msg: notify.Message{To: n.RecipientEmail, Subject: content.Subject, Body: content.Body, HTML: content.HTML}})
 		}
 		return nil
 	})
@@ -158,6 +162,34 @@ func (s *Service) ensureRequestNotices(ctx context.Context, q store.Queries, req
 	return nil
 }
 
+func (s *Service) queueSubmitted(ctx context.Context, q store.Queries, owner model.Employee, req model.Request) error {
+	if err := s.queueNotice(ctx, q, req, owner, notify.KindSubmitted); err != nil {
+		return err
+	}
+	if req.Status == model.StatusPendingManager {
+		if ok, mgr := s.managerOf(ctx, q, owner); ok {
+			return s.queueNotice(ctx, q, req, mgr, notify.KindApprovalManager)
+		}
+	}
+	return s.queueHRApproval(ctx, q, owner, req)
+}
+
+func (s *Service) queueHRApproval(ctx context.Context, q store.Queries, owner model.Employee, req model.Request) error {
+	hrs, err := s.hrPeople(ctx, q)
+	if err != nil {
+		return err
+	}
+	for _, hr := range hrs {
+		if hr.ID == owner.ID {
+			continue
+		}
+		if err := s.queueNotice(ctx, q, req, hr, notify.KindApprovalHR); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Service) queueNotice(ctx context.Context, q store.Queries, req model.Request, to model.Employee, kind string) error {
 	if to.ID == "" {
 		return nil
@@ -220,6 +252,21 @@ func (s *Service) rerouteOrphans(ctx context.Context, q store.Queries) error {
 
 func closed(st model.Status) bool {
 	return st == model.StatusRejected || st == model.StatusCancelled
+}
+
+// holdMail drops a scheduled reminder after the request is closed.
+// A decline is itself the mail for a rejected request, so it still goes out.
+func holdMail(kind string, req model.Request) bool {
+	if closed(req.Status) && kind != notify.KindDeclined {
+		return true
+	}
+	if kind == notify.KindApprovalManager && req.Status != model.StatusPendingManager {
+		return true
+	}
+	if kind == notify.KindApprovalHR && req.Status != model.StatusPendingHR {
+		return true
+	}
+	return skipReminder(kind, req)
 }
 
 func skipReminder(kind string, req model.Request) bool {

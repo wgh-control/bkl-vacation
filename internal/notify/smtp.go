@@ -87,19 +87,44 @@ func (s SMTP) Send(ctx context.Context, msg Message) error {
 
 func formatMessage(msg Message) string {
 	subject := mimeHeader(msg.Subject)
-	body := strings.ReplaceAll(msg.Body, "\r\n", "\n")
-	body = strings.ReplaceAll(body, "\n", "\r\n")
-	return strings.Join([]string{
+	plain := crlf(msg.Body)
+	head := []string{
 		"From: " + msg.From,
 		"To: " + msg.To,
 		"Subject: " + subject,
 		"MIME-Version: 1.0",
+	}
+	if strings.TrimSpace(msg.HTML) == "" {
+		return strings.Join(append(head,
+			"Content-Type: text/plain; charset=UTF-8",
+			"Content-Transfer-Encoding: 8bit",
+			"",
+			plain,
+			"",
+		), "\r\n")
+	}
+	const boundary = "=_bkl_leave_mail"
+	return strings.Join(append(head,
+		"Content-Type: multipart/alternative; boundary=\""+boundary+"\"",
+		"",
+		"--"+boundary,
 		"Content-Type: text/plain; charset=UTF-8",
 		"Content-Transfer-Encoding: 8bit",
 		"",
-		body,
+		plain,
+		"--"+boundary,
+		"Content-Type: text/html; charset=UTF-8",
+		"Content-Transfer-Encoding: 8bit",
 		"",
-	}, "\r\n")
+		crlf(msg.HTML),
+		"--"+boundary+"--",
+		"",
+	), "\r\n")
+}
+
+func crlf(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return strings.ReplaceAll(s, "\n", "\r\n")
 }
 
 func mimeHeader(s string) string {

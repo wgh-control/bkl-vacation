@@ -6,6 +6,7 @@ import (
 	"github.com/wgh-control/bkl-vacation/internal/identity"
 	"github.com/wgh-control/bkl-vacation/internal/leave"
 	"github.com/wgh-control/bkl-vacation/internal/model"
+	"github.com/wgh-control/bkl-vacation/internal/notify"
 	"github.com/wgh-control/bkl-vacation/internal/store"
 )
 
@@ -117,7 +118,13 @@ func (s *Service) managerDecision(ctx context.Context, q store.Queries, actor, o
 	if err := q.UpdateRequest(ctx, *req); err != nil {
 		return err
 	}
-	return s.audit(ctx, q, actor.ID, req.ID, owner.ID, decision, string(before), string(req.Status))
+	if err := s.audit(ctx, q, actor.ID, req.ID, owner.ID, decision, string(before), string(req.Status)); err != nil {
+		return err
+	}
+	if decision == "reject" {
+		return s.queueNotice(ctx, q, *req, owner, notify.KindDeclined)
+	}
+	return s.queueHRApproval(ctx, q, owner, *req)
 }
 
 func (s *Service) hrDecision(ctx context.Context, q store.Queries, actor, owner model.Employee, req *model.Request, decision, comment string) error {
@@ -137,7 +144,10 @@ func (s *Service) hrDecision(ctx context.Context, q store.Queries, actor, owner 
 		if err := q.UpdateRequest(ctx, *req); err != nil {
 			return err
 		}
-		return s.audit(ctx, q, actor.ID, req.ID, owner.ID, "reject", string(before), string(req.Status))
+		if err := s.audit(ctx, q, actor.ID, req.ID, owner.ID, "reject", string(before), string(req.Status)); err != nil {
+			return err
+		}
+		return s.queueNotice(ctx, q, *req, owner, notify.KindDeclined)
 	}
 	if req.Type == model.TypeSick {
 		if req.CertificateNumber == "" {
@@ -188,6 +198,9 @@ func (s *Service) hrDecision(ctx context.Context, q store.Queries, actor, owner 
 		}
 	}
 	if err := s.ensureRequestNotices(ctx, q, *req, owner); err != nil {
+		return err
+	}
+	if err := s.queueNotice(ctx, q, *req, owner, notify.KindApproved); err != nil {
 		return err
 	}
 	return s.audit(ctx, q, actor.ID, req.ID, owner.ID, "approve", string(before), string(req.Status))

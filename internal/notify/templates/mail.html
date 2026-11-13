@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="{{.Lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f1eb;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background-color:#f4f1eb;background-image:url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%2264%22%3E%3Ctext x=%220%22 y=%2214%22 fill=%22%23e3dcd2%22 font-family=%22monospace%22 font-size=%2211%22%3E%23a.0%3Daa%23%3C/text%3E%3Ctext x=%2218%22 y=%2230%22 fill=%22%23e3dcd2%22 font-family=%22monospace%22 font-size=%2211%22%3E..0%23aa..%3C/text%3E%3Ctext x=%224%22 y=%2246%22 fill=%22%23e3dcd2%22 font-family=%22monospace%22 font-size=%2211%22%3Ea%23%3D0..%23a%3C/text%3E%3Ctext x=%2224%22 y=%2262%22 fill=%22%23e3dcd2%22 font-family=%22monospace%22 font-size=%2211%22%3E%2300.a%23.%3C/text%3E%3C/svg%3E');">
+<tr>
+<td align="center" style="padding:32px 16px 40px;">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="width:560px;max-width:560px;border-collapse:separate;background:#ffffff;border:1px solid #efe8df;border-radius:22px;">
+<tr>
+<td style="height:6px;background:#d71015;border-radius:22px 22px 0 0;font-size:0;line-height:0;">&nbsp;</td>
+</tr>
+<tr>
+<td style="height:4px;background:#fdc000;font-size:0;line-height:0;">&nbsp;</td>
+</tr>
+<tr>
+<td style="padding:22px 32px 8px;font-family:Roboto,Arial,Helvetica,sans-serif;">
+<span style="display:inline-block;width:10px;height:10px;border-radius:10px;background:#d71015;margin-right:6px;"></span>
+<span style="display:inline-block;width:10px;height:10px;border-radius:10px;background:#fdc000;margin-right:6px;"></span>
+<span style="display:inline-block;width:10px;height:10px;border-radius:10px;background:#d9dde2;"></span>
+</td>
+</tr>
+<tr>
+<td style="padding:14px 32px 0;font-family:Roboto,Arial,Helvetica,sans-serif;">
+<span style="font-size:20px;line-height:24px;font-weight:700;letter-spacing:0.14em;color:#0C1013;">LE</span><span style="display:inline-block;width:16px;height:16px;border-radius:16px;background:#d71015;vertical-align:middle;margin:0 1px 3px;"></span><span style="font-size:20px;line-height:24px;font-weight:700;letter-spacing:0.14em;color:#0C1013;">N</span>
+<span style="display:inline-block;width:18px;"></span>
+<span style="font-size:16px;line-height:24px;color:#33363C;">{{.Product}}</span>
+</td>
+</tr>
+<tr>
+<td style="padding:22px 32px 0;font-family:Roboto,Arial,Helvetica,sans-serif;font-size:12px;line-height:16px;letter-spacing:0.08em;text-transform:uppercase;color:#6B737C;">{{.Eyebrow}}</td>
+</tr>
+<tr>
+<td style="padding:8px 32px 0;font-family:Roboto,Arial,Helvetica,sans-serif;font-size:28px;line-height:34px;font-weight:700;color:#d71015;">{{.Title}}</td>
+</tr>
+<tr>
+<td style="padding:16px 32px 0;font-family:Roboto,Arial,Helvetica,sans-serif;">
+{{if eq .Tone "stop"}}
+<span style="display:inline-block;border:1px solid #d71015;border-radius:999px;padding:6px 14px;font-size:14px;line-height:18px;font-weight:700;color:#d71015;background:#ffffff;">{{.Chip}}</span>
+{{else}}
+<span style="display:inline-block;border-radius:999px;padding:6px 14px;font-size:14px;line-height:18px;font-weight:700;color:#0C1013;background:#fdc000;">{{.Chip}}</span>
+{{end}}
+</td>
+</tr>
+<tr>
+<td style="padding:18px 32px 0;font-family:Roboto,Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#33363C;">{{.Lead}}</td>
+</tr>
+{{if .Detail}}
+<tr>
+<td style="padding:12px 32px 0;font-family:Roboto,Arial,Helvetica,sans-serif;font-size:15px;line-height:22px;color:#6B737C;">{{.Detail}}</td>
+</tr>
+{{end}}
+<tr>
+<td style="padding:28px 32px 8px;font-family:Roboto,Arial,Helvetica,sans-serif;font-size:13px;line-height:18px;color:#6B737C;">{{.Footer}}</td>
+</tr>
+<tr>
+<td style="padding:0 32px 26px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;line-height:12px;color:#c4b8aa;white-space:pre;">{{.Texture}}</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</body>
+</html>

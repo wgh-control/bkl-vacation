@@ -21,7 +21,7 @@ go run ./cmd/worker
 
 The API listens on `:8080` (`HTTP_ADDR`). OpenAPI is `api/openapi.yaml` in the repo and `GET /api/openapi.yaml` on the server. Paths in the spec are relative to `/api`.
 
-`go run ./cmd/api` requires `DATABASE_URL`, `KEYCLOAK_ISSUER`, and `KEYCLOAK_CLIENT_ID`. The worker requires `DATABASE_URL`. Directory sync runs only when `KEYCLOAK_ADMIN_CLIENT_ID` is set. Mail is sent only when `SMTP_HOST` and `SMTP_FROM` are set; a portal notice is still stored when mail fails.
+`go run ./cmd/api` requires `DATABASE_URL`, `KEYCLOAK_ISSUER`, and `KEYCLOAK_CLIENT_ID`. The worker requires `DATABASE_URL`. Directory sync runs only when `KEYCLOAK_ADMIN_CLIENT_ID` is set. Mail is sent only when `SMTP_HOST` and `SMTP_FROM` are set; a portal notice is still stored when mail fails. Each notice is a plain-text part plus an HTML part, in Russian or English, for the employee, the manager, or HR.
 
 | Variable | Role |
 | --- | --- |

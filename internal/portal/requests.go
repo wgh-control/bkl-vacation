@@ -37,6 +37,9 @@ func (s *Service) CreateRequest(ctx context.Context, p identity.Principal, in Cr
 		if err := s.audit(ctx, q, emp.ID, req.ID, emp.ID, "create", "", string(req.Status)); err != nil {
 			return err
 		}
+		if err := s.queueSubmitted(ctx, q, emp, req); err != nil {
+			return err
+		}
 		out, err = s.viewRequest(ctx, q, req, "self")
 		return err
 	})
@@ -332,6 +335,9 @@ func (s *Service) Reschedule(ctx context.Context, p identity.Principal, id strin
 			return err
 		}
 		if err := s.audit(ctx, q, emp.ID, next.ID, emp.ID, "reschedule", string(old.Status), string(next.Status)); err != nil {
+			return err
+		}
+		if err := s.queueSubmitted(ctx, q, emp, next); err != nil {
 			return err
 		}
 		out, err = s.viewRequest(ctx, q, next, "self")

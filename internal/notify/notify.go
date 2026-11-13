@@ -10,6 +10,11 @@ import (
 )
 
 const (
+	KindSubmitted         = "submitted"
+	KindApprovalManager   = "approval_needed_manager"
+	KindApprovalHR        = "approval_needed_hr"
+	KindApproved          = "approved"
+	KindDeclined          = "declined"
 	KindNotice14          = "notice_14"
 	KindConfirm5          = "confirm_5"
 	KindRemind3Employee   = "remind_3_employee"
@@ -19,12 +24,14 @@ const (
 	KindProcessedEmployee = "processed_employee"
 )
 
-// Message is one mail. The portal notice is created even when this cannot be sent.
+// Message is one mail. HTML is the Leon template; Body stays the plain part.
+// The portal notice is created even when this cannot be sent.
 type Message struct {
 	From    string
 	To      string
 	Subject string
 	Body    string
+	HTML    string
 }
 
 // Sender delivers one message. A nil or unconfigured sender must return an error
@@ -36,17 +43,80 @@ type Sender interface {
 // ErrNotConfigured means SMTP settings were not supplied.
 var ErrNotConfigured = fmt.Errorf("smtp not configured")
 
-// Content is the subject and body in the recipient's language.
+// Content is the subject, the portal text, and the HTML mail.
 type Content struct {
 	Subject string
 	Title   string
 	Body    string
+	HTML    string
 }
 
-// Compose renders a notice. Dates are civil days.
+// Compose renders a vacation notice. Dates are civil days.
 func Compose(kind, locale, employeeName, start, end string) Content {
-	ru := locale != "en"
+	return Render(Vars{
+		Kind: kind, Locale: locale, Employee: employeeName, Start: start, End: end, Type: "vacation",
+	})
+}
+
+func composeText(v Vars) Content {
+	ru := v.Locale != "en"
+	kind := v.Kind
+	employeeName := v.Employee
+	start, end := v.Start, v.End
+	label := typeLabel(v.Type, ru)
 	switch kind {
+	case KindSubmitted:
+		if ru {
+			return Content{
+				Subject: "Заявка отправлена",
+				Title:   "Заявка отправлена",
+				Body:    fmt.Sprintf("Заявка на %s с %s по %s отправлена и ждёт согласования.", label, start, end),
+			}
+		}
+		return Content{
+			Subject: "Request submitted",
+			Title:   "Request submitted",
+			Body:    fmt.Sprintf("Your %s request from %s to %s has been submitted and is waiting for approval.", label, start, end),
+		}
+	case KindApprovalManager, KindApprovalHR:
+		if ru {
+			return Content{
+				Subject: "Нужно согласование: " + employeeName,
+				Title:   "Нужно согласование",
+				Body:    fmt.Sprintf("%s: заявка на %s с %s по %s ждёт вашего согласования.", employeeName, label, start, end),
+			}
+		}
+		return Content{
+			Subject: "Approval needed: " + employeeName,
+			Title:   "Approval needed",
+			Body:    fmt.Sprintf("%s is waiting for your approval of %s from %s to %s.", employeeName, label, start, end),
+		}
+	case KindApproved:
+		if ru {
+			return Content{
+				Subject: "Заявка согласована",
+				Title:   "Заявка согласована",
+				Body:    fmt.Sprintf("Заявку на %s с %s по %s согласовали.", label, start, end),
+			}
+		}
+		return Content{
+			Subject: "Request approved",
+			Title:   "Request approved",
+			Body:    fmt.Sprintf("Your %s request from %s to %s was approved.", label, start, end),
+		}
+	case KindDeclined:
+		if ru {
+			return Content{
+				Subject: "Заявка отклонена",
+				Title:   "Заявка отклонена",
+				Body:    fmt.Sprintf("Заявку на %s с %s по %s отклонили. Эти даты в график не встали.", label, start, end),
+			}
+		}
+		return Content{
+			Subject: "Request declined",
+			Title:   "Request declined",
+			Body:    fmt.Sprintf("Your %s request from %s to %s was declined. Those dates are not on the schedule.", label, start, end),
+		}
 	case KindNotice14:
 		if ru {
 			return Content{
@@ -103,13 +173,13 @@ func Compose(kind, locale, employeeName, start, end string) Content {
 		if ru {
 			return Content{
 				Subject: "Можно оформлять отпуск: " + employeeName,
-				Title:   "Отпуск подтверждён",
+				Title:   "Оформите отпуск",
 				Body:    fmt.Sprintf("%s подтвердил отпуск с %s по %s. Можно готовить документы.", employeeName, start, end),
 			}
 		}
 		return Content{
-			Subject: "Vacation confirmed: " + employeeName,
-			Title:   "Vacation confirmed",
+			Subject: "Process vacation: " + employeeName,
+			Title:   "Process the vacation",
 			Body:    fmt.Sprintf("%s confirmed the vacation from %s to %s. Documents can be prepared.", employeeName, start, end),
 		}
 	case KindProcessedEmployee:
