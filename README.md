@@ -2,6 +2,8 @@
 
 Go API and background worker for the BKL vacation portal. This repository holds the service, Postgres migrations, and the OpenAPI contract. The portal UI and the deploy manifests are separate.
 
+Vacation is one module on that API and on one Postgres database. Another area, such as education requests, registers its routes, tables, and mail on the same process. See [Modules](#modules).
+
 The API covers vacation, unpaid and compensatory days off, and sick leave. Balances follow a working year that starts on the hire anniversary (Labor Code articles 121 and 122). The employee year view also returns planned, approved, and moved vacation days for past calendar years, the current year, and next year. An employee can plan a vacation in the next calendar year.
 
 HR is an employee. A person in the HR group uses the employee routes for their own vacation, day off, and sick requests, and the HR routes for the approval queue, schedule, and reports. Reports export as PDF, XLS (SpreadsheetML), XLSX, or CSV, scoped to one person, one department, or everyone.
@@ -43,6 +45,16 @@ The API listens on `:8080` (`HTTP_ADDR`). OpenAPI is `api/openapi.yaml` in the r
 
 Directory data comes from Keycloak, which already reads Active Directory. The worker does not open its own LDAP connection. Sync does not delete people; a disabled account is marked inactive.
 
+## Modules
+
+`internal/platform` is the shared host: the HTTP server, the Postgres pool, the `schema_migration` ledger, and the SMTP sender. `internal/app` is the list of modules. Vacation is the first entry. A new module implements `platform.Module` and is appended there. It does not open its own database or listen on its own port.
+
+- **Routes.** Handlers on the shared mux, under `/api`. Vacation's paths are unchanged. A later module adds its own, for example `POST /api/education/requests`.
+- **Tables.** SQL applied by `go run ./cmd/migrate` and by `/app/api migrate`, in registration order. A version already stored in `schema_migration` is skipped. Vacation's files are `internal/vacation/schema/001_init.sql` and `002_finance.sql`. The ledger key is the file name, so a database that already applied those names does not run them again. A later module prefixes its key, for example `education/001_requests.sql`. `employee` and `org_unit` live in the first vacation migration and are shared; later modules reference them instead of creating a second directory.
+- **Mail.** The worker calls each module's `Dispatch` with the one SMTP sender. A portal notice is still stored when SMTP is not configured.
+
+Directory sync stays on the worker. It fills the shared employee rows. It is not a per-module job.
+
 ## Rules the API enforces
 
 - The basic grant is 28 days plus an HR-set extra. Unpaid days off past 14 calendar days in a working year reduce accrual (article 121). The grant itself stays 28 plus extra.
@@ -61,4 +73,4 @@ Directory data comes from Keycloak, which already reads Active Directory. The wo
 go test ./...
 ```
 
-The Postgres test is skipped unless `DATABASE_URL` is set. With a database it applies `migrations/001_init.sql` and runs one request through manager and HR approval.
+The Postgres test is skipped unless `DATABASE_URL` is set. With a database it applies the registered module tables, including `internal/vacation/schema/001_init.sql`, and runs one request through manager and HR approval.
