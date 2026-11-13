@@ -1,10 +1,14 @@
 import type { ReactNode } from 'react'
 import logo from '../assets/brand/logo-dark.png'
+import { BackgroundWink } from '../shell/background-wink'
 
 export function Stage({ children }: { children: ReactNode }) {
   return (
     <div className="stage">
-      <div className="stage-photo" aria-hidden="true" />
+      <div className="stage-figure">
+        <div className="stage-photo" aria-hidden="true" />
+        <BackgroundWink />
+      </div>
       <div className="stage-wash" aria-hidden="true" />
       <div className="stage-ascii" aria-hidden="true" />
       {children}
