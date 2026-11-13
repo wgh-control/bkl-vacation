@@ -1,3 +1,8 @@
+/**
+ * Employee client area: own planned, approved, and moved days.
+ * The glass shell owns the stage, title bar, and language switch.
+ * This screen uses the tokens and classes in styles/global.css.
+ */
 import { useCallback } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import type { LeaveRequest } from '../api/types'
@@ -45,6 +50,7 @@ export function EmployeeHome() {
     reload()
   }
 
+  const kind = yearKind(year, today)
   const requests = data?.requests ?? []
   const inThisYear = requests.filter((request) => inYear(request.start, request.end, year))
   const grouped = Object.fromEntries(buckets.map((name) => [name, [] as LeaveRequest[]])) as Record<
@@ -158,9 +164,13 @@ export function EmployeeHome() {
             <Link className="btn btn-yellow" to={`/requests/new?type=vacation&year=${nextYear}`} data-testid="plan-next-year">
               {t('employee.planNextYear')}
             </Link>
-            <Link className="btn btn-ghost-light" to="/requests/new">
-              {t('employee.newRequest')}
-            </Link>
+            {kind === 'past' ? (
+              <p className="muted">{t('employee.pastReadOnly')}</p>
+            ) : (
+              <Link className="btn btn-ghost-light" to="/requests/new">
+                {t('employee.newRequest')}
+              </Link>
+            )}
           </div>
 
           <section className="plan" aria-label={t('employee.planFor')}>

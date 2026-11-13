@@ -49,6 +49,7 @@ export function RequestDetail() {
   if (error || !request) return <p className="banner banner-warn">{translateError(t, error ?? 'not_found')}</p>
 
   const own = request.person.id === me.id
+  const historical = request.end < today
   const confirmation = confirmationState(request, today)
   const steps = timelineSteps(request)
   const current = timelineIndex(request)
@@ -213,7 +214,7 @@ export function RequestDetail() {
         </form>
       ) : null}
 
-      {own && canReschedule(request) ? (
+      {own && !historical && canReschedule(request) ? (
         <section className="card stack">
           <h2>{t('detail.reschedule')}</h2>
           <p className="muted">{t('detail.rescheduleNote')}</p>
@@ -254,7 +255,7 @@ export function RequestDetail() {
         </section>
       ) : null}
 
-      {own && canCancel(request) ? (
+      {own && !historical && canCancel(request) ? (
         <section className="stack">
           {cancelling ? (
             <div className="actions">
