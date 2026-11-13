@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420">
+  <g fill="#33363c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">
+    <text y="18">#aa===...000###aaa===....0000###aa===...000###</text>
+    <text y="36">.=a###0000....aaa###===000....aaa###0000....aa</text>
+    <text y="54">a===###000....aaaaaa###===....0000aaa###....00</text>
+    <text y="72">000###aaa===....00.a###0000....aaa===###000...</text>
+    <text y="90">..00aaa###===000....a#00....000###aaa===....00</text>
+    <text y="108">###===000aaa....00###===....aaaa000###===....0</text>
+    <text y="126">.a000###===aaa....0000###aa===....00.000###aaa</text>
+    <text y="144">===###000....aaa###===0000....aa###000....aaa=</text>
+    <text y="162">00....aaa###===....000###aaa===....00###000aaa</text>
+    <text y="180">#aa===....000###aaa===....0000###aa===....000#</text>
+    <text y="198">..000###aaa===....aa###000....===aaa###000....</text>
+    <text y="216">aaa===###000....00aaa###===....000###aaa===...</text>
+    <text y="234">.00###aaa===....0000###aa===....aaa###000....a</text>
+    <text y="252">===000###aaa....00.a###===000....aaa###===000.</text>
+    <text y="270">000....aaa###===....00###000aaa===....###aa=00</text>
+    <text y="288">###aa===....000###aaa===....0000###aaa===....0</text>
+    <text y="306">.a###000....aaa===###000....00aaa###===....000</text>
+    <text y="324">00===aaa###....000###aaa===....aa###000....aaa</text>
+    <text y="342">===###000aaa....00###===aaa000....###aaa===...</text>
+    <text y="360">..000aaa###===....###000aaa===....000###aaa===</text>
+    <text y="378">###===000....aaa###===0000....aa###000....aaa#</text>
+    <text y="396">.00aaa###===....000###aaa===....00###000aaa===</text>
+    <text y="414">a===###000....aaaa###===....0000aaa###===....0</text>
+  </g>
+  <g fill="#6b737c" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22" opacity="0.85">
+    <text y="48">0 1 0 1 0 1 0 1 0 1 0 1</text>
+    <text y="110">/ / / / / / / / / / /</text>
+    <text y="176">+ - + - + - + - + - +</text>
+    <text y="250">[ ] [ ] [ ] [ ] [ ]</text>
+    <text y="320">* * * * * * * * * *</text>
+    <text y="390">= = = = = = = = = =</text>
+  </g>
+</svg>
