@@ -1,0 +1,325 @@
+# GitLab CI for bkl-vacation.
+#
+# Test, build the image, push the commit SHA, then record that tag in
+# deploy/kustomization.yaml and push the commit to the git revision Argo CD
+# watches. This pipeline does not run kubectl.
+#
+# GitLab group: placeholder-gitlab-group
+# GitLab project: placeholder-gitlab-project
+# Registry host: placeholder.invalid until REGISTRY_HOST is set
+# Image repository: placeholder-image-name until IMAGE_NAME is set
+#
+# Recommended GitLab project: a pull mirror of
+# https://github.com/wgh-control/bkl-vacation
+# Argo CD tracks that GitHub repository. GIT_PUSH_URL is the remote the
+# image-tag job pushes to, so the tag commit lands on the revision Argo CD
+# watches. With the pull mirror, that remote is the GitHub repository.
+#
+# Every required variable is listed in deploy/README.md.
+# This pipeline reads the GitLab CI/CD variables in the variables block
+# below, plus REGISTRY_USER, REGISTRY_PASSWORD, and GIT_PUSH_TOKEN.
+# Mark REGISTRY_PASSWORD and GIT_PUSH_TOKEN masked.
+# GIT_PUSH_USER defaults to oauth2. For a GitHub remote, set x-access-token.
+#
+# Runtime secrets are not read here and are not baked into the image.
+# Vault KV bkl-vacation/runtime is the source. Until Vault is connected,
+# create masked GitLab CI/CD variables with the same names:
+#   DATABASE_URL, KEYCLOAK_CLIENT_SECRET, SMTP_USERNAME, SMTP_PASSWORD
+#
+# Build and publish use Docker-in-Docker. The runner must allow privileged
+# mode for that service.
+#
+# Placeholder list and the image contract: deploy/README.md.
+
+stages:
+  - test
+  - build
+  - publish
+  - manifest
+
+variables:
+  REGISTRY_HOST: "placeholder.invalid"
+  IMAGE_NAME: "placeholder-image-name"
+  GIT_PUSH_URL: ""
+  GIT_PUSH_USER: "oauth2"
+  GO_VERSION: "1.25"
+  NODE_VERSION: "22"
+  SPA_DIST: "dist"
+  KUSTOMIZE_VERSION: "5.6.0"
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+.kustomize:
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache curl tar git
+    - |
+      set -eu
+      arch=$(uname -m)
+      case "$arch" in
+        x86_64) karch=amd64 ;;
+        aarch64) karch=arm64 ;;
+        *) echo "unsupported architecture: $arch" >&2; exit 1 ;;
+      esac
+      curl -fsSL -o /tmp/kustomize.tar.gz \
+        "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_${karch}.tar.gz"
+      tar -C /usr/local/bin -xzf /tmp/kustomize.tar.gz kustomize
+      kustomize version
+
+.dind:
+  image: docker:27
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_BUILDKIT: "1"
+  before_script:
+    - |
+      set -eu
+      ready=0
+      i=0
+      while [ "$i" -lt 15 ]; do
+        if docker info >/dev/null 2>&1; then
+          ready=1
+          break
+        fi
+        i=$((i + 1))
+        sleep 2
+      done
+      if [ "$ready" -ne 1 ]; then
+        docker info
+        exit 1
+      fi
+
+manifests:
+  extends: .kustomize
+  stage: test
+  script:
+    - |
+      set -eu
+      rendered=$(mktemp)
+      kustomize build deploy > "$rendered"
+      if grep -nE ':latest([[:space:]]|$)' "$rendered"; then
+        echo "rendered manifests must use the commit SHA, not the latest tag"
+        exit 1
+      fi
+      if grep -nE 'kind:[[:space:]]*StatefulSet' "$rendered"; then
+        echo "PostgreSQL stays outside the cluster; no StatefulSet belongs here"
+        exit 1
+      fi
+      deps=$(grep -c 'kind: Deployment' "$rendered")
+      if [ "$deps" -ne 2 ]; then
+        echo "expected 2 Deployments, found $deps"
+        exit 1
+      fi
+      img_lines=$(grep -E '^[[:space:]]*image:' "$rendered")
+      img_count=$(printf '%s\n' "$img_lines" | grep -c .)
+      if [ "$img_count" -ne 3 ]; then
+        echo "expected 3 workload images, found $img_count"
+        exit 1
+      fi
+      unique=$(printf '%s\n' "$img_lines" | awk '{print $2}' | sort -u | grep -c .)
+      if [ "$unique" -ne 1 ]; then
+        echo "api, worker, and migrate must use the same image"
+        printf '%s\n' "$img_lines"
+        exit 1
+      fi
+      if printf '%s\n' "$img_lines" | grep -q ':latest$'; then
+        echo "rendered manifests must use the commit SHA, not the latest tag"
+        exit 1
+      fi
+      grep -q 'path: /healthz' "$rendered"
+      grep -q 'path: /readyz' "$rendered"
+      grep -q 'argocd.argoproj.io/hook: PreSync' "$rendered"
+      grep -q 'name: bkl-vacation-api' "$rendered"
+      grep -q 'name: bkl-vacation-worker' "$rendered"
+      grep -q 'name: bkl-vacation-migrate' "$rendered"
+      grep -q 'kind: ExternalSecret' "$rendered"
+      grep -q 'kind: SecretStore' "$rendered"
+      grep -q 'name: bkl-vacation-vault' "$rendered"
+      grep -q 'placeholder-vault-host.invalid' "$rendered"
+      grep -q 'key: bkl-vacation/runtime' "$rendered"
+      hooks=$(grep -c 'argocd.argoproj.io/hook: PreSync' "$rendered")
+      if [ "$hooks" -ne 4 ]; then
+        echo "expected 4 PreSync hooks, found $hooks"
+        exit 1
+      fi
+      if grep -qE '^kind: Secret$' "$rendered"; then
+        echo "the Kubernetes Secret is created from Vault and is not committed"
+        exit 1
+      fi
+      if grep -q 'argoproj.io/v1alpha1' "$rendered"; then
+        echo "the Argo CD Application is applied once and is not part of this build"
+        exit 1
+      fi
+      if grep -q 'placeholder-database-url' "$rendered"; then
+        echo "secret values do not belong in the rendered manifests"
+        exit 1
+      fi
+
+go-test:
+  stage: test
+  image: golang:$GO_VERSION-bookworm
+  interruptible: true
+  rules:
+    - exists:
+        - go.mod
+  cache:
+    key:
+      files:
+        - go.sum
+    paths:
+      - .cache/go-build
+      - .cache/go-mod
+  variables:
+    GOCACHE: "$CI_PROJECT_DIR/.cache/go-build"
+    GOMODCACHE: "$CI_PROJECT_DIR/.cache/go-mod"
+  script:
+    - go test ./...
+    - go vet ./...
+    - test -z "$(gofmt -l .)"
+
+frontend-test:
+  stage: test
+  image: node:$NODE_VERSION-bookworm
+  interruptible: true
+  rules:
+    - exists:
+        - frontend/package.json
+  cache:
+    key:
+      files:
+        - frontend/package-lock.json
+    paths:
+      - frontend/.npm
+  variables:
+    NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/frontend/.npm"
+  script:
+    - cd frontend
+    - npm ci
+    - npm test
+    - npm run lint
+
+build:
+  extends: .dind
+  stage: build
+  interruptible: true
+  rules:
+    - if: '$CI_COMMIT_MESSAGE =~ /\[skip ci\]/'
+      when: never
+    - if: '$CI_COMMIT_BRANCH || $CI_PIPELINE_SOURCE == "merge_request_event"'
+      exists:
+        - go.mod
+  script:
+    - |
+      set -eu
+      # rules:exists is any-file. Require the frontend lockfile too, and
+      # leave a successful empty build when it is not in this revision yet.
+      echo "IMAGE_BUILT=false" > build.env
+      if [ ! -f frontend/package.json ] || [ ! -f frontend/package-lock.json ]; then
+        echo "Image build waits until frontend/package.json and frontend/package-lock.json are in the revision."
+        echo "skip" > image.tar
+        exit 0
+      fi
+      IMAGE_REF="${REGISTRY_HOST}/${IMAGE_NAME}:${CI_COMMIT_SHA}"
+      docker build \
+        --build-arg "GO_VERSION=${GO_VERSION}" \
+        --build-arg "NODE_VERSION=${NODE_VERSION}" \
+        --build-arg "SPA_DIST=${SPA_DIST}" \
+        -t "$IMAGE_REF" \
+        .
+      docker save -o image.tar "$IMAGE_REF"
+      echo "IMAGE_BUILT=true" > build.env
+  artifacts:
+    paths:
+      - image.tar
+    reports:
+      dotenv: build.env
+    expire_in: 1 day
+
+publish:
+  extends: .dind
+  stage: publish
+  interruptible: false
+  needs:
+    - build
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+      exists:
+        - go.mod
+  script:
+    - |
+      set -eu
+      echo "IMAGE_PUBLISHED=false" > publish.env
+      if [ "${IMAGE_BUILT:-false}" != "true" ]; then
+        echo "No image was built for this revision."
+        exit 0
+      fi
+      if [ "$REGISTRY_HOST" = "placeholder.invalid" ] || [ -z "${REGISTRY_USER:-}" ] || [ -z "${REGISTRY_PASSWORD:-}" ]; then
+        echo "Set REGISTRY_HOST, REGISTRY_USER, and REGISTRY_PASSWORD in GitLab CI/CD variables."
+        exit 1
+      fi
+      IMAGE_REF="${REGISTRY_HOST}/${IMAGE_NAME}:${CI_COMMIT_SHA}"
+      case "$IMAGE_REF" in
+        *:latest)
+          echo "refusing to push the latest tag"
+          exit 1
+          ;;
+      esac
+      printf '%s' "$REGISTRY_PASSWORD" | docker login "$REGISTRY_HOST" --username "$REGISTRY_USER" --password-stdin
+      docker load -i image.tar
+      docker push "$IMAGE_REF"
+      echo "IMAGE_PUBLISHED=true" > publish.env
+  artifacts:
+    reports:
+      dotenv: publish.env
+
+image-tag:
+  extends: .kustomize
+  stage: manifest
+  interruptible: false
+  needs:
+    - publish
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+      exists:
+        - go.mod
+  script:
+    - |
+      set -eu
+      if [ "${IMAGE_PUBLISHED:-false}" != "true" ]; then
+        echo "No new image was published. deploy/kustomization.yaml stays unchanged."
+        exit 0
+      fi
+      if [ "$REGISTRY_HOST" = "placeholder.invalid" ] || [ -z "${GIT_PUSH_URL:-}" ] || [ -z "${GIT_PUSH_TOKEN:-}" ]; then
+        echo "Set REGISTRY_HOST, IMAGE_NAME, GIT_PUSH_URL, and GIT_PUSH_TOKEN before recording the image tag."
+        exit 1
+      fi
+      git config user.email "ci@placeholder.invalid"
+      git config user.name "bkl-vacation-ci"
+      git config --global --add safe.directory "$CI_PROJECT_DIR"
+      cd deploy
+      kustomize edit set image "bkl-vacation=${REGISTRY_HOST}/${IMAGE_NAME}:${CI_COMMIT_SHA}"
+      cd "$CI_PROJECT_DIR"
+      if git diff --quiet -- deploy/kustomization.yaml; then
+        echo "Image tag already matches ${CI_COMMIT_SHA}."
+        exit 0
+      fi
+      git add deploy/kustomization.yaml
+      git commit -m "chore(deploy): set image tag to ${CI_COMMIT_SHA} [skip ci]"
+      askpass=$(mktemp)
+      cat > "$askpass" <<'EOF'
+      #!/bin/sh
+      case "$1" in
+        *Username*) printf '%s\n' "$GIT_PUSH_USER" ;;
+        *) printf '%s\n' "$GIT_PUSH_TOKEN" ;;
+      esac
+      EOF
+      chmod 700 "$askpass"
+      GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 git push "$GIT_PUSH_URL" "HEAD:${CI_DEFAULT_BRANCH}"
+      rm -f "$askpass"

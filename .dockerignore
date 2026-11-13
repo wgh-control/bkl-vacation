@@ -1,0 +1,6 @@
+.git
+.gitlab-ci.yml
+deploy
+**/node_modules
+**/.npm
+**/.cache
