@@ -41,6 +41,8 @@ describe('portal areas', () => {
 
     await user.click(screen.getByRole('button', { name: '2025 Прошлый' }))
     expect(await screen.findByRole('heading', { name: 'План на год 2025' })).toBeTruthy()
+    expect(screen.getByText(/Прошлый год только для просмотра/)).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Новая заявка' })).toBeNull()
 
     await user.click(screen.getByTestId('plan-next-year'))
     expect(await screen.findByRole('heading', { name: 'Отпуск на следующий год' })).toBeTruthy()

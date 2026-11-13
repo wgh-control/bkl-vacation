@@ -25,6 +25,7 @@ export const ru = {
   'employee.streakPossible': 'Свободных дней хватает, чтобы позже взять часть от 14 дней.',
   'employee.streakNo': 'Часть от 14 дней в этом рабочем году уже не собрать.',
   'employee.past': 'Прошлый',
+  'employee.pastReadOnly': 'Прошлый год только для просмотра. Новую заявку можно подать на текущий или следующий год.',
   'employee.current': 'Текущий',
   'employee.next': 'Следующий',
   'employee.planFor': 'План на год',

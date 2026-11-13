@@ -27,6 +27,7 @@ export const en: Record<MessageKey, string> = {
   'employee.streakPossible': 'The free days can still form a 14-day part later.',
   'employee.streakNo': 'A 14-day part can no longer be formed this working year.',
   'employee.past': 'Past',
+  'employee.pastReadOnly': 'A past year is read-only. A new request can be filed for this year or the next one.',
   'employee.current': 'This year',
   'employee.next': 'Next year',
   'employee.planFor': 'Plan for the year',

@@ -30,8 +30,9 @@ export function RequestWizard() {
   const typeParam = params.get('type')
   const initialType: RequestType =
     typeParam === 'day_off' || typeParam === 'sick' || typeParam === 'vacation' ? typeParam : 'vacation'
-  const planningNext = year === String(calendarYear(today) + 1) && initialType === 'vacation'
+  const pastYear = year != null && Number(year) < calendarYear(today)
   const [type, setType] = useState<RequestType>(initialType)
+  const planningNext = year === String(calendarYear(today) + 1) && type === 'vacation'
   const [start, setStart] = useState(planningNext && year ? `${year}-07-01` : '')
   const [end, setEnd] = useState(planningNext && year ? `${year}-07-14` : '')
   const [reason, setReason] = useState<DayOffReason | ''>('')
@@ -64,7 +65,7 @@ export function RequestWizard() {
 
   const { data, error } = useLoad(load, [load])
   const preview = data?.preview
-  const blocked = !preview || hasReject(preview) || (type === 'day_off' && !reason)
+  const blocked = pastYear || !preview || hasReject(preview) || (type === 'day_off' && !reason)
   const min = year ? (year === String(calendarYear(today)) ? today : `${year}-01-01`) : today
   const max = year ? `${year}-12-31` : undefined
 
@@ -135,7 +136,8 @@ export function RequestWizard() {
               <input type="date" required min={start || min} max={max} value={end} onChange={(event) => setEnd(event.target.value)} />
             </label>
           </div>
-          {year ? <p className="muted">{t('request.wizard.yearBound')}</p> : null}
+          {pastYear ? <p className="banner banner-warn">{t('employee.pastReadOnly')}</p> : null}
+          {year && !pastYear ? <p className="muted">{t('request.wizard.yearBound')}</p> : null}
           {type === 'day_off' ? (
             <label className="field">
               <span>{t('request.wizard.reason')}</span>
