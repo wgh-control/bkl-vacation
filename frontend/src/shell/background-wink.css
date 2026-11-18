@@ -1,0 +1,81 @@
+/* Still keeps the Leon mark. Only the eye swaps to the closed frame. */
+
+.stage-figure {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.stage-figure > .stage-photo {
+  position: absolute;
+  background-image: url("./background-wink-still.png");
+  -webkit-mask-image:
+    linear-gradient(90deg, #000 0 34%, transparent 72%),
+    url("./background-wink-hole.svg");
+  mask-image:
+    linear-gradient(90deg, #000 0 34%, transparent 72%),
+    url("./background-wink-hole.svg");
+  -webkit-mask-size: 100% 100%, cover;
+  mask-size: 100% 100%, cover;
+  -webkit-mask-position: 0 0, 92% center;
+  mask-position: 0 0, 92% center;
+  -webkit-mask-repeat: no-repeat, no-repeat;
+  mask-repeat: no-repeat, no-repeat;
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+.stage-wink,
+.stage-wink-open,
+.stage-wink-closed {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.stage-wink {
+  opacity: 0.62;
+  -webkit-mask-image:
+    linear-gradient(90deg, #000 0 34%, transparent 72%),
+    url("./background-wink-eye.svg");
+  mask-image:
+    linear-gradient(90deg, #000 0 34%, transparent 72%),
+    url("./background-wink-eye.svg");
+  -webkit-mask-size: 100% 100%, cover;
+  mask-size: 100% 100%, cover;
+  -webkit-mask-position: 0 0, 92% center;
+  mask-position: 0 0, 92% center;
+  -webkit-mask-repeat: no-repeat, no-repeat;
+  mask-repeat: no-repeat, no-repeat;
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+.stage-wink-open,
+.stage-wink-closed {
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: 92% center;
+}
+
+.stage-wink-open {
+  background-image: url("./background-wink-still.png");
+}
+
+.stage-wink-closed {
+  background-image: url("./background-wink.png");
+  animation: stage-wink 5s step-end infinite;
+}
+
+@keyframes stage-wink {
+  0%, 65% { opacity: 0; }
+  65.01%, 72% { opacity: 1; }
+  72.01%, 100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-wink-closed {
+    animation: none;
+    opacity: 0;
+  }
+}

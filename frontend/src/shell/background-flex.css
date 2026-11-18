@@ -1,11 +1,19 @@
-/* Motion clip in the open left band: flexed arm, shirt mark, and face.
-   The still photo's background-position stays in global.css. */
+/* Flex clip in the open left band. It already carries the flex, the peak wink,
+   and the shirt mark. Wink and logo stay mounted in the same figure; this layer
+   sits above those overlays and below the glass. */
 
 .stage-flex {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
+}
+
+/* The clip already winks and wears the mark. These overlays use the still's
+   frame, so they would paint a second face and a second logo. */
+.stage-figure > .stage-wink,
+.stage-figure > .stage-shirt-logo {
+  visibility: hidden;
 }
 
 .stage-flex-motion,
@@ -29,7 +37,7 @@
   display: none;
 }
 
-.stage:has(.stage-flex) > .stage-photo {
+.stage:has(.stage-flex) .stage-photo {
   visibility: hidden;
 }
 
