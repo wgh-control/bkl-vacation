@@ -1,4 +1,4 @@
-package httpserver
+package vacation
 
 import (
 	"bytes"
@@ -14,7 +14,7 @@ import (
 	"github.com/wgh-control/bkl-vacation/internal/config"
 	"github.com/wgh-control/bkl-vacation/internal/identity"
 	"github.com/wgh-control/bkl-vacation/internal/notify"
-	"github.com/wgh-control/bkl-vacation/internal/portal"
+	"github.com/wgh-control/bkl-vacation/internal/platform"
 	"github.com/wgh-control/bkl-vacation/internal/store"
 )
 
@@ -46,17 +46,21 @@ func (e jsonError) Error() string { return string(e) }
 
 func TestEmployeeAndHRRoutes(t *testing.T) {
 	mem := store.NewMemory()
-	svc := portal.New(mem, "hr", config.ClaimNames{
-		HireDate: "hire_date", Manager: "manager", Department: "department", EmployeeNumber: "employee_number",
-	})
-	svc.Now = func() time.Time { return time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC) }
 	box := &sentMail{}
-	svc.Mail = box
-	svc.FinanceEmail = "payroll@example.com"
-	srv := &Server{Svc: svc, Auth: headerAuth{}, Ready: mem.Ping}
-	h := srv.Handler()
+	mod := New(mem, "hr", config.ClaimNames{
+		HireDate: "hire_date", Manager: "manager", Department: "department", EmployeeNumber: "employee_number",
+	}, box, "payroll@example.com")
+	mod.Svc.Now = func() time.Time { return time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC) }
+	h := platform.Handler(platform.Deps{
+		Auth: headerAuth{}, Ready: mem.Ping, OpenAPI: api.OpenAPI, Modules: []platform.Module{mod},
+	})
 
 	do(t, h, http.MethodGet, "/api/healthz", "", nil, http.StatusOK)
+	do(t, h, http.MethodGet, "/api/readyz", "", nil, http.StatusOK)
+	spec := do(t, h, http.MethodGet, "/api/openapi.yaml", "", nil, http.StatusOK)
+	if !strings.Contains(spec, "/hr/export") {
+		t.Fatal("openapi route")
+	}
 	rec := do(t, h, http.MethodGet, "/api/me", "", map[string]string{"X-Sub": "mgr", "X-Name": "Mia"}, http.StatusOK)
 	if !strings.Contains(rec, `"hr":false`) {
 		t.Fatal(rec)
@@ -109,9 +113,101 @@ func TestEmployeeAndHRRoutes(t *testing.T) {
 	if !bytes.Contains(xls, []byte(">ada<")) || bytes.Contains(xls, []byte(">Ira<")) {
 		t.Fatalf("xls scope %s", xls)
 	}
-	if !strings.Contains(string(api.OpenAPI), "planned_days") || !strings.Contains(string(api.OpenAPI), "/hr/export") || !strings.Contains(string(api.OpenAPI), "/hr/requests/{id}/finance") {
+	if !strings.Contains(string(api.OpenAPI), "planned_days") || !strings.Contains(string(api.OpenAPI), "/hr/export") || !strings.Contains(string(api.OpenAPI), "/hr/requests/{id}/finance") || !strings.Contains(string(api.OpenAPI), "/intranet") {
 		t.Fatal("openapi")
 	}
+}
+
+func TestIntranetLink(t *testing.T) {
+	mem := store.NewMemory()
+	mod := New(mem, "hr", config.ClaimNames{
+		HireDate: "hire_date", Manager: "manager", Department: "department", EmployeeNumber: "employee_number",
+	}, nil, "")
+	h := platform.Handler(platform.Deps{
+		Auth: headerAuth{}, Ready: mem.Ping, Modules: []platform.Module{mod},
+	})
+
+	do(t, h, http.MethodGet, "/api/intranet", "", nil, http.StatusUnauthorized)
+	do(t, h, http.MethodGet, "/api/me", "", map[string]string{"X-Sub": "mgr", "X-Name": "Mia"}, http.StatusOK)
+	do(t, h, http.MethodGet, "/api/me", "", map[string]string{"X-Sub": "ada", "X-Name": "Ada", "X-Manager": "mgr"}, http.StatusOK)
+
+	ada := intranetDoc(t, h, map[string]string{"X-Sub": "ada", "X-Name": "Ada"})
+	if ada.User.Subject != "ada" || ada.User.ID == "" || !ada.User.Active || ada.User.Email != "ada@example.com" {
+		t.Fatalf("user %+v", ada.User)
+	}
+	if ids := moduleIDs(ada); ids != "employee" {
+		t.Fatalf("ada modules %s", ids)
+	}
+	if path := linkPath(ada, "employee", "request"); path != "/requests/{id}" {
+		t.Fatalf("request link %s", path)
+	}
+	if linkPath(ada, "employee", "new") != "/requests/new" || linkPath(ada, "employee", "open") != "/" {
+		t.Fatalf("employee links %+v", ada.Modules)
+	}
+
+	mgr := intranetDoc(t, h, map[string]string{"X-Sub": "mgr", "X-Name": "Mia"})
+	if ids := moduleIDs(mgr); ids != "employee,manager" {
+		t.Fatalf("mgr modules %s", ids)
+	}
+	if linkPath(mgr, "manager", "open") != "/team" {
+		t.Fatalf("manager link %+v", mgr.Modules)
+	}
+
+	hr := intranetDoc(t, h, map[string]string{"X-Sub": "hr", "X-Name": "Ira", "X-Groups": "hr"})
+	if ids := moduleIDs(hr); ids != "employee,hr" {
+		t.Fatalf("hr modules %s", ids)
+	}
+	if linkPath(hr, "hr", "open") != "/hr" || linkPath(hr, "hr", "reports") != "/hr/reports" {
+		t.Fatalf("hr links %+v", hr.Modules)
+	}
+}
+
+type intranetBody struct {
+	User struct {
+		Subject string `json:"subject"`
+		ID      string `json:"id"`
+		Email   string `json:"email"`
+		Active  bool   `json:"active"`
+	} `json:"user"`
+	Modules []struct {
+		ID    string `json:"id"`
+		Links []struct {
+			Rel  string `json:"rel"`
+			Path string `json:"path"`
+		} `json:"links"`
+	} `json:"modules"`
+}
+
+func intranetDoc(t *testing.T, h http.Handler, headers map[string]string) intranetBody {
+	t.Helper()
+	raw := do(t, h, http.MethodGet, "/api/intranet", "", headers, http.StatusOK)
+	var doc intranetBody
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+		t.Fatal(raw)
+	}
+	return doc
+}
+
+func moduleIDs(doc intranetBody) string {
+	ids := make([]string, 0, len(doc.Modules))
+	for _, m := range doc.Modules {
+		ids = append(ids, m.ID)
+	}
+	return strings.Join(ids, ",")
+}
+
+func linkPath(doc intranetBody, module, rel string) string {
+	for _, m := range doc.Modules {
+		if m.ID != module {
+			continue
+		}
+		for _, link := range m.Links {
+			if link.Rel == rel {
+				return link.Path
+			}
+		}
+	}
+	return ""
 }
 
 type sentMail struct {

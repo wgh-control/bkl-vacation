@@ -1,0 +1,55 @@
+/* Motion clip in the open left band: flexed arm, shirt mark, and face.
+   The still photo's background-position stays in global.css. */
+
+.stage-flex {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.stage-flex-motion,
+.stage-flex-still {
+  position: absolute;
+  top: 50%;
+  left: clamp(-110px, calc(100vw - 1540px), 0px);
+  width: clamp(720px, calc(100vw - 760px), 1200px);
+  height: auto;
+  aspect-ratio: 16 / 9;
+  transform: translateY(-50%);
+  object-fit: cover;
+  object-position: center;
+  opacity: 0.9;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, #000 0 58%, transparent 86%);
+  mask-image: linear-gradient(90deg, #000 0 58%, transparent 86%);
+}
+
+.stage-flex-still {
+  display: none;
+}
+
+.stage:has(.stage-flex) > .stage-photo {
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-flex-motion {
+    display: none;
+  }
+
+  .stage-flex-still {
+    display: block;
+  }
+}
+
+@media (max-width: 800px) {
+  .stage-flex-motion,
+  .stage-flex-still {
+    left: -10vw;
+    width: 78vw;
+    opacity: 0.38;
+    -webkit-mask-image: linear-gradient(90deg, #000 0 28%, transparent 68%);
+    mask-image: linear-gradient(90deg, #000 0 28%, transparent 68%);
+  }
+}
