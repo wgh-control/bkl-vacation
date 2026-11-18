@@ -6,8 +6,8 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/wgh-control/bkl-vacation/internal/app"
 	"github.com/wgh-control/bkl-vacation/internal/config"
-	"github.com/wgh-control/bkl-vacation/migrations"
 )
 
 func main() {
@@ -23,7 +23,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
-	if err := migrations.Apply(ctx, pool); err != nil {
+	if err := app.Migrate(ctx, pool); err != nil {
 		slog.Error("migrate", "err", err.Error())
 		os.Exit(1)
 	}
