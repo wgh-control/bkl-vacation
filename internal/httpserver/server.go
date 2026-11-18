@@ -31,6 +31,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/openapi.yaml", s.openapi)
 	mux.HandleFunc("GET /api/me", s.authed(s.me))
 	mux.HandleFunc("PATCH /api/me", s.authed(s.patchMe))
+	mux.HandleFunc("GET /api/intranet", s.authed(s.intranet))
 	mux.HandleFunc("GET /api/calendar", s.authed(s.calendar))
 	mux.HandleFunc("GET /api/balance", s.authed(s.balance))
 	mux.HandleFunc("GET /api/me/days", s.authed(s.days))
@@ -118,6 +119,11 @@ func (s *Server) openapi(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	out, err := s.Svc.Me(r.Context(), principal(r))
+	respond(w, out, err)
+}
+
+func (s *Server) intranet(w http.ResponseWriter, r *http.Request) {
+	out, err := s.Svc.Intranet(r.Context(), principal(r))
 	respond(w, out, err)
 }
 
