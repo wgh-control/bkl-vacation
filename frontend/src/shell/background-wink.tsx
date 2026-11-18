@@ -1,6 +1,6 @@
 import './background-wink.css'
 
-/** Eye-only layer. The shirt mark stays on the still underneath. */
+/** Eye-only layer. The shirt mark stays on the logo layer. */
 export function BackgroundWink() {
   return (
     <div className="stage-wink" aria-hidden="true">
