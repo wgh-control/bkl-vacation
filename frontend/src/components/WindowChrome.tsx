@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import logo from '../assets/brand/logo-dark.png'
 import { StageFlex } from '../shell/background-flex'
-import { BackgroundWink } from '../shell/background-wink'
 import { ShirtLogo } from '../shell/background-logo'
+import { BackgroundWink } from '../shell/background-wink'
 
 export function Stage({ children }: { children: ReactNode }) {
   return (
