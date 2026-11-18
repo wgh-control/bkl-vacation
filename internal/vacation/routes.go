@@ -21,6 +21,7 @@ func mount(svc *portal.Service, r platform.Router) {
 	h := &handlers{svc: svc}
 	r.Authenticated("GET /api/me", h.me)
 	r.Authenticated("PATCH /api/me", h.patchMe)
+	r.Authenticated("GET /api/intranet", h.intranet)
 	r.Authenticated("GET /api/calendar", h.calendar)
 	r.Authenticated("GET /api/balance", h.balance)
 	r.Authenticated("GET /api/me/days", h.days)
@@ -57,6 +58,11 @@ func principal(r *http.Request) identity.Principal {
 
 func (h *handlers) me(w http.ResponseWriter, r *http.Request) {
 	out, err := h.svc.Me(r.Context(), principal(r))
+	respond(w, out, err)
+}
+
+func (h *handlers) intranet(w http.ResponseWriter, r *http.Request) {
+	out, err := h.svc.Intranet(r.Context(), principal(r))
 	respond(w, out, err)
 }
 

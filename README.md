@@ -55,6 +55,14 @@ Directory data comes from Keycloak, which already reads Active Directory. The wo
 
 Directory sync stays on the worker. It fills the shared employee rows. It is not a per-module job.
 
+## OpenIntranet
+
+Drupal (Open Intranet) uses the same Keycloak person and the same access token. `GET /api/intranet` returns who that person is, which modules they can open, and deep links into the portal.
+
+`user.subject` is the Keycloak `sub` on the employee row this API already stores. There is no second database, and vacation requests are not copied into Drupal. Every signed-in person can open `employee`. A person with direct reports can also open `manager`. The HR group can also open `hr`.
+
+The paths (`/`, `/requests/new`, `/requests/{id}`, `/team`, `/hr`, `/hr/reports`) are the portal UI, not `/api` routes. `{id}` is a vacation request id. This service does not store the portal host; Drupal adds the origin it already uses. Set `CORS_ORIGIN` to the Drupal origin when the browser calls this path.
+
 ## Rules the API enforces
 
 - The basic grant is 28 days plus an HR-set extra. Unpaid days off past 14 calendar days in a working year reduce accrual (article 121). The grant itself stays 28 plus extra.
