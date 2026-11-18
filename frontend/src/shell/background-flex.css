@@ -8,6 +8,13 @@
   pointer-events: none;
 }
 
+/* The clip already winks and wears the mark. These overlays use the still's
+   frame, so they would paint a second face and a second logo. */
+.stage-figure > .stage-wink,
+.stage-figure > .stage-shirt-logo {
+  visibility: hidden;
+}
+
 .stage-flex-motion,
 .stage-flex-still {
   position: absolute;
@@ -29,7 +36,7 @@
   display: none;
 }
 
-.stage:has(.stage-flex) > .stage-photo {
+.stage:has(.stage-flex) .stage-photo {
   visibility: hidden;
 }
 
