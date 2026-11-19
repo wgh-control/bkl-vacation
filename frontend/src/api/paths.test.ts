@@ -4,6 +4,8 @@ import { paths } from './paths'
 describe('paths', () => {
   it('builds the plan routes and the report query', () => {
     expect(paths.me()).toBe('/me')
+    expect(paths.managers()).toBe('/hr/managers')
+    expect(paths.manager('emp ivan')).toBe('/hr/employees/emp%20ivan/manager')
     expect(paths.balance('2026-11-13')).toBe('/balance?on=2026-11-13')
     expect(paths.confirm('a b')).toBe('/requests/a%20b/confirm')
     expect(paths.decision('step-1')).toBe('/approvals/step-1/decision')

@@ -21,17 +21,20 @@ var (
 // Vars is the data for one notice. Type is vacation, day_off, or sick.
 // Role is employee, manager, or hr. An empty role is chosen from Kind.
 type Vars struct {
-	Kind           string
-	Locale         string
-	Employee       string
-	Start          string
-	End            string
-	Type           string
-	Role           string
-	Moved          bool
-	CountedDays    int
-	PayBy          string
-	EmployeeNumber string
+	Kind            string
+	Locale          string
+	Employee        string
+	Start           string
+	End             string
+	Type            string
+	Role            string
+	Moved           bool
+	CountedDays     int
+	PayBy           string
+	EmployeeNumber  string
+	Manager         string
+	ADManager       string
+	PreviousManager string
 }
 
 type mailData struct {
@@ -86,7 +89,7 @@ func renderHTML(v Vars, text Content) (string, error) {
 		Title:   text.Title,
 		Lead:    text.Body,
 		Detail:  detail(v, ru),
-		Chip:    strings.TrimSpace(v.Start + " — " + v.End),
+		Chip:    mailChip(v),
 		Footer:  "Это письмо сервиса отпусков. Отвечать на него не нужно.",
 		Product: "Отпуска",
 		Tone:    "go",
@@ -114,7 +117,7 @@ func (v Vars) role() string {
 	switch v.Kind {
 	case KindApprovalManager, KindRemind3Manager:
 		return "manager"
-	case KindApprovalHR, KindRemind3HR, KindConfirmedHR, KindApprovedHR:
+	case KindApprovalHR, KindRemind3HR, KindConfirmedHR, KindApprovedHR, KindManagerADChanged:
 		return "hr"
 	case KindFinance:
 		return "finance"
@@ -148,7 +151,23 @@ func eyebrow(role string, ru bool) string {
 	}
 }
 
+func mailChip(v Vars) string {
+	if v.Kind == KindManagerADChanged {
+		if name := strings.TrimSpace(v.Employee); name != "" {
+			return name
+		}
+		return strings.TrimSpace(v.ADManager)
+	}
+	return strings.TrimSpace(v.Start + " — " + v.End)
+}
+
 func detail(v Vars, ru bool) string {
+	if v.Kind == KindManagerADChanged {
+		if ru {
+			return "В кабинете кадров можно принять значение из каталога, оставить текущего руководителя или назначить другого."
+		}
+		return "In the HR area you can take the directory value, keep the current manager, or choose another."
+	}
 	if !v.Moved {
 		return ""
 	}

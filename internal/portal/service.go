@@ -154,10 +154,7 @@ func (s *Service) upsertFromPrincipal(ctx context.Context, q store.Queries, p id
 		}
 		emp.DepartmentID = unit.ID
 	}
-	managerRaw := p.Claim(s.Claims.Manager)
-	if managerRaw != "" {
-		emp.ManagerRaw = managerRaw
-	}
+	managerRaw := strings.TrimSpace(p.Claim(s.Claims.Manager))
 	if !found {
 		saved, err := q.UpsertEmployee(ctx, emp)
 		if err != nil {
@@ -166,9 +163,10 @@ func (s *Service) upsertFromPrincipal(ctx context.Context, q store.Queries, p id
 		emp = saved
 	}
 	if managerRaw != "" {
-		if mgr, err := s.resolveManager(ctx, q, managerRaw); err == nil && mgr.ID != emp.ID {
-			emp.ManagerID = mgr.ID
+		if err := s.applyADManager(ctx, q, &emp, managerRaw); err != nil {
+			return model.Employee{}, err
 		}
+		return emp, nil
 	}
 	if err := q.UpdateEmployee(ctx, emp); err != nil {
 		return model.Employee{}, err

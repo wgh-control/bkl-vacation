@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ApiError } from '../api/errors'
 import type { RequestType } from '../api/types'
 import { DecisionCard } from '../components/DecisionCard'
+import { HrManagers } from './HrManagers'
 import { YearCalendar } from '../components/YearCalendar'
 import { calendarYear, todayISO, yearBounds } from '../domain/dates'
 import { formatRange } from '../format'
@@ -51,6 +52,7 @@ export function HrArea() {
           {t('hr.openReports')}
         </Link>
       </div>
+      <HrManagers />
       {loading ? <p className="muted">{t('common.loading')}</p> : null}
       {error ? <p className="banner banner-warn">{translateError(t, error)}</p> : null}
 

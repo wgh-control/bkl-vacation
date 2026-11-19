@@ -41,6 +41,8 @@ func mount(svc *portal.Service, r platform.Router) {
 	r.Authenticated("POST /api/approvals/{id}/decision", h.decide)
 	r.Authenticated("GET /api/team/requests", h.team)
 	r.Authenticated("GET /api/hr/queue", h.hrQueue)
+	r.Authenticated("GET /api/hr/managers", h.managers)
+	r.Authenticated("POST /api/hr/employees/{id}/manager", h.setManager)
 	r.Authenticated("POST /api/hr/requests/{id}/processed", h.processed)
 	r.Authenticated("POST /api/hr/requests/{id}/finance", h.finance)
 	r.Authenticated("GET /api/hr/export", h.export)
@@ -204,6 +206,23 @@ func (h *handlers) team(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) hrQueue(w http.ResponseWriter, r *http.Request) {
 	out, err := h.svc.HRQueue(r.Context(), principal(r))
 	respond(w, map[string]any{"queue": out}, err)
+}
+
+func (h *handlers) managers(w http.ResponseWriter, r *http.Request) {
+	out, err := h.svc.ManagerDirectory(r.Context(), principal(r))
+	respond(w, out, err)
+}
+
+func (h *handlers) setManager(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Action    string `json:"action"`
+		ManagerID string `json:"manager_id"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	out, err := h.svc.SetManager(r.Context(), principal(r), r.PathValue("id"), portal.ManagerAction{Action: body.Action, ManagerID: body.ManagerID})
+	respond(w, out, err)
 }
 
 func (h *handlers) processed(w http.ResponseWriter, r *http.Request) {

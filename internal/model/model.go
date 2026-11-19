@@ -29,26 +29,30 @@ const (
 const CancelRescheduled = "rescheduled"
 
 type Employee struct {
-	ID             string
-	Subject        string
-	DisplayName    string
-	Email          string
-	Locale         string
-	LocaleChosen   bool
-	EmployeeNumber string
-	Position       string
-	DepartmentID   string
-	ManagerID      string
-	ManagerRaw     string
-	HireDate       *time.Time
-	Active         bool
-	HR             bool
-	ExtraDays      int
-	EarlyLeave     bool
-	Raw            []byte
-	LastSyncAt     *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID                  string
+	Subject             string
+	DisplayName         string
+	Email               string
+	Locale              string
+	LocaleChosen        bool
+	EmployeeNumber      string
+	Position            string
+	DepartmentID        string
+	ManagerID           string
+	ManagerRaw          string
+	ADManagerID         string
+	ManagerOverrideID   string
+	ManagerConflictADID string
+	ManagerConflictRaw  string
+	HireDate            *time.Time
+	Active              bool
+	HR                  bool
+	ExtraDays           int
+	EarlyLeave          bool
+	Raw                 []byte
+	LastSyncAt          *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type OrgUnit struct {
@@ -134,6 +138,8 @@ type Notification struct {
 	SentAt              *time.Time
 	LastError           string
 	NoticeCreated       bool
+	DedupeKey           string
+	Payload             []byte
 	CreatedAt           time.Time
 }
 

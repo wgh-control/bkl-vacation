@@ -294,7 +294,13 @@ func (m *Memory) ListCalendarDays(_ context.Context, from, to time.Time) ([]mode
 
 func (m *Memory) InsertNotification(_ context.Context, n model.Notification) error {
 	for _, cur := range m.notes {
-		if cur.RequestID == n.RequestID && cur.Kind == n.Kind && cur.RecipientEmployeeID == n.RecipientEmployeeID {
+		if n.DedupeKey != "" {
+			if cur.DedupeKey == n.DedupeKey && cur.Kind == n.Kind && cur.RecipientEmployeeID == n.RecipientEmployeeID {
+				return nil
+			}
+			continue
+		}
+		if cur.DedupeKey == "" && cur.RequestID == n.RequestID && cur.Kind == n.Kind && cur.RecipientEmployeeID == n.RecipientEmployeeID {
 			return nil
 		}
 	}

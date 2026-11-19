@@ -52,4 +52,6 @@ export const paths = {
     }),
   people: (q?: string) => query('/hr/people', { q }),
   departments: () => '/hr/departments',
+  managers: () => '/hr/managers',
+  manager: (employeeId: string) => `/hr/employees/${id(employeeId)}/manager`,
 }

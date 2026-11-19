@@ -340,6 +340,9 @@ h2, h3 { font-family: var(--font); font-weight: 650; letter-spacing: -0.02em; }
 
 .stack { display: grid; gap: 14px; }
 
+.managed { padding-top: 12px; border-top: 1px solid rgba(12, 16, 19, 0.08); }
+.managed:first-of-type { border-top: 0; padding-top: 0; }
+
 .grid-3, .split, .fields-2, .stats { display: grid; gap: 16px; }
 
 .grid-3 { grid-template-columns: repeat(3, 1fr); margin-top: 18px; }

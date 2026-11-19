@@ -192,3 +192,41 @@ type DecisionInput struct {
 	Decision string
 	Comment  string
 }
+
+// ManagerAction is an HR change to the manual manager.
+// Action is set, clear, take_ad, or keep.
+type ManagerAction struct {
+	Action    string
+	ManagerID string
+}
+
+// ManagerDirectory is every employee grouped under the effective manager.
+type ManagerDirectory struct {
+	Groups []ManagerGroup `json:"groups"`
+}
+
+// ManagerGroup is one manager and the people who report to them.
+// Manager is null when nobody is assigned.
+type ManagerGroup struct {
+	Manager *Ref              `json:"manager"`
+	People  []ManagedEmployee `json:"people"`
+}
+
+// ManagedEmployee is one person in the HR directory.
+// Manager is who approves vacation. A manual override wins over Active Directory until HR clears it.
+type ManagedEmployee struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Email          string `json:"email,omitempty"`
+	EmployeeNumber string `json:"employee_number,omitempty"`
+	Position       string `json:"position,omitempty"`
+	Department     string `json:"department,omitempty"`
+	Active         bool   `json:"active"`
+	Manual         bool   `json:"manual"`
+	Manager        *Ref   `json:"manager,omitempty"`
+	ADManager      *Ref   `json:"ad_manager,omitempty"`
+	ADManagerRaw   string `json:"ad_manager_raw,omitempty"`
+	Override       *Ref   `json:"override,omitempty"`
+	ADChange       *Ref   `json:"ad_change,omitempty"`
+	ADChangeRaw    string `json:"ad_change_raw,omitempty"`
+}

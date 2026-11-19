@@ -28,7 +28,7 @@ func TestHTMLTemplates(t *testing.T) {
 	for _, kind := range []string{
 		KindSubmitted, KindApprovalManager, KindApprovalHR, KindApproved, KindApprovedHR, KindFinance, KindDeclined,
 		KindNotice14, KindConfirm5, KindRemind3Employee, KindRemind3Manager, KindRemind3HR,
-		KindConfirmedHR, KindProcessedEmployee,
+		KindConfirmedHR, KindProcessedEmployee, KindManagerADChanged,
 	} {
 		for _, locale := range []string{"ru", "en"} {
 			got := Compose(kind, locale, "Ада", "2027-06-15", "2027-06-28")
@@ -51,6 +51,26 @@ func TestHTMLTemplates(t *testing.T) {
 	mgr := Render(Vars{Kind: KindApprovalManager, Locale: "ru", Employee: "Ада", Start: "2027-06-15", End: "2027-06-28", Type: "day_off", Role: "manager"})
 	if !contains(mgr.Body, "отгул") || !contains(mgr.HTML, "Руководителю") {
 		t.Fatal(mgr.Body)
+	}
+	ruMgr := Render(Vars{
+		Kind: KindManagerADChanged, Locale: "ru", Role: "hr", Employee: "Ада Соколова",
+		ADManager: "Кузнецов Олег", PreviousManager: "Орлова Елена", Manager: "Соколова Анна",
+	})
+	enMgr := Render(Vars{
+		Kind: KindManagerADChanged, Locale: "en", Role: "hr", Employee: "Ada Sokolova",
+		ADManager: "Oleg Kuznetsov", PreviousManager: "Elena Orlova", Manager: "Anna Sokolova",
+	})
+	if ruMgr.Subject == enMgr.Subject || !contains(ruMgr.HTML, "Кадрам") || !contains(enMgr.HTML, "HR") {
+		t.Fatalf("ru %q en %q", ruMgr.Subject, enMgr.Subject)
+	}
+	if !contains(ruMgr.Body, "Active Directory") || !contains(ruMgr.Body, "Соколова Анна") || !contains(ruMgr.HTML, "принять значение из каталога") {
+		t.Fatal(ruMgr.Body)
+	}
+	if !contains(enMgr.Body, "manual manager") || !contains(enMgr.Body, "Anna Sokolova") || !contains(enMgr.HTML, "keep the current manager") {
+		t.Fatal(enMgr.Body)
+	}
+	if !contains(ruMgr.HTML, "#d71015") || !contains(enMgr.HTML, "#fdc000") || !contains(enMgr.HTML, "#f4f1eb") {
+		t.Fatal("manager mail palette")
 	}
 	raw := formatMessage(Message{From: "hr@example.com", To: "a@example.com", Subject: "Заявка", Body: "Текст", HTML: ru.HTML})
 	if !contains(raw, "multipart/alternative") || !contains(raw, "text/html") || !contains(raw, "Текст") || !contains(raw, "#d71015") {

@@ -84,11 +84,9 @@ export function EmployeeHome() {
             {t('employee.number')} {me.employeeNumber}
           </span>
         ) : null}
-        {me.manager ? (
-          <span>
-            {t('employee.manager')}: {me.manager.displayName}
-          </span>
-        ) : null}
+        <span data-testid="profile-manager">
+          {t('employee.manager')}: {me.manager ? me.manager.displayName : t('employee.managerNone')}
+        </span>
       </p>
 
       {loading ? <p className="muted">{t('common.loading')}</p> : null}
@@ -180,6 +178,9 @@ export function EmployeeHome() {
               </h2>
               <span className="muted">{t(`employee.${yearKind(year, today)}`)}</span>
             </div>
+            <p className="muted" data-testid="plan-manager">
+              {t('employee.manager')}: {me.manager ? me.manager.displayName : t('employee.managerNone')}
+            </p>
             <div className="years" data-testid="year-switcher">
               {years.map((item) => (
                 <button
