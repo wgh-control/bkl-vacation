@@ -24,6 +24,7 @@ const (
 	KindRemind3HR         = "remind_3_hr"
 	KindConfirmedHR       = "confirmed_hr"
 	KindProcessedEmployee = "processed_employee"
+	KindManagerADChanged  = "manager_ad_changed"
 )
 
 // Message is one mail. HTML is the Leon template; Body stays the plain part.
@@ -217,6 +218,48 @@ func composeText(v Vars) Content {
 			Subject: "Process vacation: " + employeeName,
 			Title:   "Process the vacation",
 			Body:    fmt.Sprintf("%s confirmed the vacation from %s to %s. Documents can be prepared.", employeeName, start, end),
+		}
+	case KindManagerADChanged:
+		who := strings.TrimSpace(employeeName)
+		ad := strings.TrimSpace(v.ADManager)
+		manual := strings.TrimSpace(v.Manager)
+		if ru {
+			if who == "" {
+				who = "Сотрудник"
+			}
+			if ad == "" {
+				ad = "не указан"
+			}
+			if manual == "" {
+				manual = "не указан"
+			}
+			prev := ""
+			if strings.TrimSpace(v.PreviousManager) != "" {
+				prev = " Раньше в каталоге был " + strings.TrimSpace(v.PreviousManager) + "."
+			}
+			return Content{
+				Subject: "Каталог сменил руководителя: " + who,
+				Title:   "Руководитель в каталоге изменился",
+				Body:    fmt.Sprintf("%s: в Active Directory теперь руководитель %s.%s Назначенный вручную руководитель — %s. Это значение остаётся, пока кадры его не изменят.", who, ad, prev, manual),
+			}
+		}
+		if who == "" {
+			who = "An employee"
+		}
+		if ad == "" {
+			ad = "not set"
+		}
+		if manual == "" {
+			manual = "not set"
+		}
+		prev := ""
+		if strings.TrimSpace(v.PreviousManager) != "" {
+			prev = " The directory previously listed " + strings.TrimSpace(v.PreviousManager) + "."
+		}
+		return Content{
+			Subject: "Directory manager changed: " + who,
+			Title:   "Directory manager changed",
+			Body:    fmt.Sprintf("Active Directory now lists %s as the manager of %s.%s The manual manager %s stays until HR changes it.", ad, who, prev, manual),
 		}
 	case KindProcessedEmployee:
 		if ru {

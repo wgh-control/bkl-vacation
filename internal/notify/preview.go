@@ -27,6 +27,7 @@ func Samples() []Sample {
 		{"hr-approved-vacation", Vars{Kind: KindApprovedHR, Type: "vacation", Role: "hr", CountedDays: 14, PayBy: "2027-06-11"}},
 		{"finance-payment", Vars{Kind: KindFinance, Type: "vacation", Role: "finance", CountedDays: 14, PayBy: "2027-06-11", EmployeeNumber: "42"}},
 		{"employee-processed", Vars{Kind: KindProcessedEmployee, Type: "vacation", Role: "employee"}},
+		{"hr-manager-directory", Vars{Kind: KindManagerADChanged, Type: "vacation", Role: "hr"}},
 	}
 	var out []Sample
 	for _, r := range rows {
@@ -42,6 +43,17 @@ func Samples() []Sample {
 			}
 			if r.name == "employee-submitted" {
 				v.Moved = true
+			}
+			if r.name == "hr-manager-directory" {
+				if loc == "ru" {
+					v.ADManager = "Кузнецов Олег"
+					v.Manager = "Соколова Анна"
+					v.PreviousManager = "Орлова Елена"
+				} else {
+					v.ADManager = "Oleg Kuznetsov"
+					v.Manager = "Anna Sokolova"
+					v.PreviousManager = "Elena Orlova"
+				}
 			}
 			out = append(out, Sample{Name: r.name + "-" + loc, HTML: Render(v).HTML})
 		}

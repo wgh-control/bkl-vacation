@@ -708,6 +708,234 @@ func TestSendApprovedVacationToFinance(t *testing.T) {
 	}
 }
 
+func TestDirectoryManagerChangeWithoutOverride(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	if err := svc.ApplyDirectory(ctx, []DirectoryUser{
+		{Subject: "mia", DisplayName: "Mia", Email: "mia@example.com", Active: true},
+		{Subject: "ada", DisplayName: "Ada", Email: "ada@example.com", Active: true, ManagerRaw: "mia"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ada := employeeBySubject(t, svc, "ada")
+	if ada.ManagerID == "" || ada.ADManagerID != ada.ManagerID || ada.ManagerOverrideID != "" {
+		t.Fatalf("%+v", ada)
+	}
+	if err := svc.ApplyDirectory(ctx, []DirectoryUser{
+		{Subject: "nova", DisplayName: "Nova", Email: "nova@example.com", Active: true},
+		{Subject: "ada", DisplayName: "Ada", Email: "ada@example.com", Active: true, ManagerRaw: "nova"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ada = employeeBySubject(t, svc, "ada")
+	nova := employeeBySubject(t, svc, "nova")
+	if ada.ManagerID != nova.ID || ada.ADManagerID != nova.ID {
+		t.Fatalf("shown manager %+v nova %s", ada, nova.ID)
+	}
+	if n := countKind(t, svc, notify.KindManagerADChanged); n != 0 {
+		t.Fatalf("mail %d", n)
+	}
+	profile, err := svc.Me(ctx, person("ada", "Ada", "nova"))
+	if err != nil || profile.Manager == nil || profile.Manager.Name != "Nova" {
+		t.Fatalf("%+v %v", profile.Manager, err)
+	}
+}
+
+func TestManualManagerOutweighsDirectory(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	if err := svc.ApplyDirectory(ctx, []DirectoryUser{
+		{Subject: "mia", DisplayName: "Mia", Email: "mia@example.com", Active: true},
+		{Subject: "nova", DisplayName: "Nova", Email: "nova@example.com", Active: true},
+		{Subject: "kira", DisplayName: "Kira", Email: "kira@example.com", Active: true},
+		{Subject: "ada", DisplayName: "Ada", Email: "ada@example.com", Active: true, ManagerRaw: "mia"},
+		{Subject: "ira", DisplayName: "Ira", Email: "ira@example.com", Active: true, HR: true, Locale: "ru"},
+		{Subject: "max", DisplayName: "Max", Email: "max@example.com", Active: true, HR: true, Locale: "en"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ada := employeeBySubject(t, svc, "ada")
+	kira := employeeBySubject(t, svc, "kira")
+	mia := employeeBySubject(t, svc, "mia")
+	ira := person("ira", "Ira", "", "hr")
+	dir, err := svc.SetManager(ctx, ira, ada.ID, ManagerAction{Action: "set", ManagerID: kira.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adaRow := findManaged(t, dir, ada.ID)
+	if !adaRow.Manual || adaRow.Manager == nil || adaRow.Manager.ID != kira.ID {
+		t.Fatalf("%+v", adaRow)
+	}
+	if err := svc.ApplyDirectory(ctx, []DirectoryUser{
+		{Subject: "ada", DisplayName: "Ada", Email: "ada@example.com", Active: true, ManagerRaw: "nova"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ada = employeeBySubject(t, svc, "ada")
+	nova := employeeBySubject(t, svc, "nova")
+	if ada.ManagerID != kira.ID || ada.ManagerOverrideID != kira.ID || ada.ADManagerID != nova.ID || ada.ManagerConflictADID != nova.ID {
+		t.Fatalf("%+v", ada)
+	}
+	if n := countKind(t, svc, notify.KindManagerADChanged); n != 2 {
+		t.Fatalf("hr mail %d", n)
+	}
+	box := &captureMail{}
+	if err := svc.Dispatch(ctx, box); err != nil {
+		t.Fatal(err)
+	}
+	if len(box.msgs) != 2 {
+		t.Fatalf("sent %d", len(box.msgs))
+	}
+	var ru, en notify.Message
+	for _, msg := range box.msgs {
+		if strings.Contains(msg.Subject, "Каталог") {
+			ru = msg
+		}
+		if strings.Contains(msg.Subject, "Directory") {
+			en = msg
+		}
+	}
+	if !strings.Contains(ru.HTML, "Кадрам") || !strings.Contains(ru.HTML, "#d71015") || !strings.Contains(ru.Body, "Kira") || !strings.Contains(ru.HTML, "принять значение из каталога") {
+		t.Fatalf("ru %s", ru.Body)
+	}
+	if !strings.Contains(en.HTML, "HR") || !strings.Contains(en.HTML, "#fdc000") || !strings.Contains(en.Body, "manual manager") || !strings.Contains(en.HTML, "keep the current manager") {
+		t.Fatalf("en %s", en.Body)
+	}
+	if _, err := svc.SetManager(ctx, ira, ada.ID, ManagerAction{Action: "keep"}); err != nil {
+		t.Fatal(err)
+	}
+	ada = employeeBySubject(t, svc, "ada")
+	if ada.ManagerOverrideID != kira.ID || ada.ManagerConflictADID != "" || ada.ManagerID != kira.ID {
+		t.Fatalf("kept %+v", ada)
+	}
+	if err := svc.ApplyDirectory(ctx, []DirectoryUser{
+		{Subject: "ada", DisplayName: "Ada", Email: "ada@example.com", Active: true, ManagerRaw: "nova"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if n := countKind(t, svc, notify.KindManagerADChanged); n != 0 {
+		t.Fatalf("repeat mail %d", n)
+	}
+	if err := svc.ApplyDirectory(ctx, []DirectoryUser{
+		{Subject: "ada", DisplayName: "Ada", Email: "ada@example.com", Active: true, ManagerRaw: "mia"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ada = employeeBySubject(t, svc, "ada")
+	if ada.ManagerID != kira.ID || ada.ADManagerID != mia.ID || ada.ManagerConflictADID != mia.ID {
+		t.Fatalf("second change %+v", ada)
+	}
+	if n := countKind(t, svc, notify.KindManagerADChanged); n != 2 {
+		t.Fatalf("second mail %d", n)
+	}
+	if _, err := svc.SetManager(ctx, ira, ada.ID, ManagerAction{Action: "take_ad"}); err != nil {
+		t.Fatal(err)
+	}
+	ada = employeeBySubject(t, svc, "ada")
+	if ada.ManagerOverrideID != "" || ada.ManagerID != mia.ID || ada.ManagerConflictADID != "" {
+		t.Fatalf("taken %+v", ada)
+	}
+	profile, err := svc.Me(ctx, person("ada", "Ada", "mia"))
+	if err != nil || profile.Manager == nil || profile.Manager.ID != mia.ID {
+		t.Fatalf("profile %+v %v", profile.Manager, err)
+	}
+}
+
+func TestApprovalUsesManualManager(t *testing.T) {
+	svc, _ := newSvc(t)
+	ctx := context.Background()
+	if err := svc.ApplyDirectory(ctx, []DirectoryUser{
+		{Subject: "mia", DisplayName: "Mia", Email: "mia@example.com", Active: true},
+		{Subject: "kira", DisplayName: "Kira", Email: "kira@example.com", Active: true},
+		{Subject: "ada", DisplayName: "Ada", Email: "ada@example.com", Active: true, ManagerRaw: "mia", HireDate: hireDate()},
+		{Subject: "ira", DisplayName: "Ira", Email: "ira@example.com", Active: true, HR: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ada := employeeBySubject(t, svc, "ada")
+	kira := employeeBySubject(t, svc, "kira")
+	if _, err := svc.SetManager(ctx, person("ira", "Ira", "", "hr"), ada.ID, ManagerAction{Action: "set", ManagerID: kira.ID}); err != nil {
+		t.Fatal(err)
+	}
+	req, err := svc.CreateRequest(ctx, person("ada", "Ada", "mia"), CreateInput{Type: "vacation", StartsOn: "2027-06-15", EndsOn: "2027-06-28"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.Status != string(model.StatusPendingManager) {
+		t.Fatalf("%s", req.Status)
+	}
+	if codeOf(t, mustErr(svc.Decide(ctx, person("mia", "Mia", ""), req.ID, DecisionInput{Decision: "approve"}))) != "forbidden" {
+		t.Fatal("directory manager must not approve over the manual value")
+	}
+	queue, err := svc.ListApprovals(ctx, person("kira", "Kira", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, item := range queue {
+		if item.ID == req.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("manual manager queue")
+	}
+	if _, err := svc.Decide(ctx, person("kira", "Kira", ""), req.ID, DecisionInput{Decision: "approve"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func hireDate() *time.Time {
+	t := time.Date(2020, 3, 1, 0, 0, 0, 0, time.UTC)
+	return &t
+}
+
+func employeeBySubject(t *testing.T, svc *Service, subject string) model.Employee {
+	t.Helper()
+	var emp model.Employee
+	if err := svc.Repo.View(context.Background(), func(q store.Queries) error {
+		e, err := q.GetEmployeeBySubject(context.Background(), subject)
+		emp = e
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return emp
+}
+
+func findManaged(t *testing.T, dir ManagerDirectory, id string) ManagedEmployee {
+	t.Helper()
+	for _, group := range dir.Groups {
+		for _, person := range group.People {
+			if person.ID == id {
+				return person
+			}
+		}
+	}
+	t.Fatalf("missing %s", id)
+	return ManagedEmployee{}
+}
+
+func countKind(t *testing.T, svc *Service, kind string) int {
+	t.Helper()
+	var n int
+	if err := svc.Repo.View(context.Background(), func(q store.Queries) error {
+		due, err := q.ListUnsentDue(context.Background(), svc.Now().Add(time.Hour))
+		if err != nil {
+			return err
+		}
+		for _, item := range due {
+			if item.Kind == kind {
+				n++
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
 func hasKind(kinds []string, want string) bool {
 	for _, k := range kinds {
 		if k == want {

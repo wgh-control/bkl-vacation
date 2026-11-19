@@ -23,6 +23,8 @@ import type {
   HrQueue,
   Language,
   LeaveRequest,
+  ManagedPerson,
+  ManagerDirectory,
   Me,
   OverlapChoice,
   PersonRef,
@@ -49,6 +51,10 @@ type StoredPerson = {
   department: string
   hireDate: string
   managerId: string | null
+  adManagerId?: string | null
+  overrideId?: string | null
+  adChangeId?: string | null
+  adChangeRaw?: string
   roles: Role[]
   active: boolean
 }
@@ -147,6 +153,11 @@ export function createFixtureApi(options?: { today?: string }): FixtureApi {
   let currentId = 'emp-anna'
 
   function addPerson(person: StoredPerson): void {
+    person.adManagerId = person.adManagerId === undefined ? person.managerId : person.adManagerId
+    person.overrideId = person.overrideId ?? null
+    person.adChangeId = person.adChangeId ?? null
+    person.adChangeRaw = person.adChangeRaw ?? ''
+    person.managerId = person.overrideId ?? person.adManagerId
     people.set(person.id, person)
   }
 
@@ -225,6 +236,14 @@ export function createFixtureApi(options?: { today?: string }): FixtureApi {
     roles: ['employee', 'manager'],
     active: true,
   })
+  const ivan = people.get('emp-ivan')
+  if (ivan) {
+    ivan.adManagerId = 'emp-oleg'
+    ivan.overrideId = 'emp-anna'
+    ivan.adChangeId = 'emp-oleg'
+    ivan.adChangeRaw = ''
+    ivan.managerId = 'emp-anna'
+  }
 
   function mePerson(): StoredPerson {
     const person = people.get(currentId)
@@ -892,6 +911,78 @@ export function createFixtureApi(options?: { today?: string }): FixtureApi {
       }
       return [...departments.values()]
     },
+    async getManagerDirectory() {
+      requireRole('hr')
+      return managerDirectory()
+    },
+    async setManager(employeeId, body) {
+      requireRole('hr')
+      const person = people.get(employeeId)
+      if (!person) throw new ApiError('not_found', 404)
+      if (body.action === 'set') {
+        if (!body.managerId || body.managerId === person.id) throw new ApiError('validation', 400)
+        const manager = people.get(body.managerId)
+        if (!manager || !manager.active) throw new ApiError('validation', 400)
+        person.overrideId = manager.id
+        person.adChangeId = null
+        person.adChangeRaw = ''
+      } else if (body.action === 'clear' || body.action === 'take_ad') {
+        person.overrideId = null
+        person.adChangeId = null
+        person.adChangeRaw = ''
+      } else if (body.action === 'keep') {
+        person.adChangeId = null
+        person.adChangeRaw = ''
+      } else {
+        throw new ApiError('validation', 400)
+      }
+      person.managerId = person.overrideId ?? person.adManagerId ?? null
+      return managerDirectory()
+    },
+  }
+
+  function managerDirectory(): ManagerDirectory {
+    const groups = new Map<string, ManagedPerson[]>()
+    for (const person of people.values()) {
+      const key = person.managerId ?? ''
+      const list = groups.get(key) ?? []
+      list.push(managedPerson(person))
+      groups.set(key, list)
+    }
+    const result: ManagerDirectory['groups'] = []
+    for (const [key, list] of groups) {
+      list.sort((a, b) => a.displayName.localeCompare(b.displayName, 'ru'))
+      const manager = key ? people.get(key) : undefined
+      result.push({ manager: manager ? personRef(manager) : null, people: list })
+    }
+    result.sort((a, b) => {
+      if (!a.manager) return 1
+      if (!b.manager) return -1
+      return a.manager.displayName.localeCompare(b.manager.displayName, 'ru')
+    })
+    return { groups: result }
+  }
+
+  function managedPerson(person: StoredPerson): ManagedPerson {
+    const manager = person.managerId ? people.get(person.managerId) : undefined
+    const adManager = person.adManagerId ? people.get(person.adManagerId) : undefined
+    const override = person.overrideId ? people.get(person.overrideId) : undefined
+    const adChange = person.adChangeId ? people.get(person.adChangeId) : undefined
+    return {
+      id: person.id,
+      displayName: person.displayName,
+      email: person.email,
+      employeeNumber: person.employeeNumber,
+      position: person.position,
+      department: person.department,
+      active: person.active,
+      manual: Boolean(person.overrideId),
+      manager: manager ? personRef(manager) : null,
+      adManager: adManager ? personRef(adManager) : null,
+      override: override ? personRef(override) : null,
+      adChange: adChange ? personRef(adChange) : null,
+      adChangeRaw: person.adChangeRaw || undefined,
+    }
   }
 
   return api

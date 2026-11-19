@@ -463,6 +463,65 @@ paths:
                       $ref: "#/components/schemas/QueueItem"
         "403":
           $ref: "#/components/responses/Error"
+  /hr/managers:
+    get:
+      tags: [hr]
+      summary: Employees grouped under their managers
+      description: |
+        HR only. Each person is grouped under the manager who approves their
+        vacation: the manual value when HR has set one, otherwise the manager
+        from Active Directory. The directory value is the manager attribute
+        already synced through Keycloak. `manual` is true while an override
+        is in place. `ad_change` is set when the directory manager changed
+        and HR has not yet taken it, kept the manual value, or chosen another.
+      responses:
+        "200":
+          description: Groups. A null manager is the unassigned group.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagerDirectory"
+        "403":
+          $ref: "#/components/responses/Error"
+  /hr/employees/{id}/manager:
+    post:
+      tags: [hr]
+      summary: Set, clear, or confirm a manual manager
+      description: |
+        HR only. `set` stores a manual manager and that value outweighs Active
+        Directory until HR clears it. `clear` removes the manual value.
+        `take_ad` removes it and shows the current directory manager.
+        `keep` leaves the manual value and records that HR saw the directory change.
+        Vacation approval uses the effective manager after this call.
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [set, clear, take_ad, keep]
+                manager_id:
+                  type: string
+                  description: Required for `set`. The employee id of the manager.
+      responses:
+        "200":
+          description: The directory after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagerDirectory"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
   /hr/requests/{id}/finance:
     post:
       tags: [hr]
@@ -816,6 +875,57 @@ components:
         id:
           type: string
         name:
+          type: string
+    ManagerDirectory:
+      type: object
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManagerGroup"
+    ManagerGroup:
+      type: object
+      required: [people]
+      properties:
+        manager:
+          $ref: "#/components/schemas/Ref"
+        people:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManagedEmployee"
+    ManagedEmployee:
+      type: object
+      required: [id, name, active, manual]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        employee_number:
+          type: string
+        position:
+          type: string
+        department:
+          type: string
+        active:
+          type: boolean
+        manual:
+          type: boolean
+          description: True when HR set a manager by hand. That value outweighs Active Directory until it is cleared.
+        manager:
+          $ref: "#/components/schemas/Ref"
+        ad_manager:
+          $ref: "#/components/schemas/Ref"
+        ad_manager_raw:
+          type: string
+        override:
+          $ref: "#/components/schemas/Ref"
+        ad_change:
+          $ref: "#/components/schemas/Ref"
+        ad_change_raw:
           type: string
     WorkingYear:
       type: object

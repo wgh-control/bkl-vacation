@@ -70,9 +70,10 @@ func (s *pgQ) UpsertEmployee(ctx context.Context, e model.Employee) (model.Emplo
 	const q = `
 INSERT INTO employee (
     id, keycloak_sub, display_name, email, locale, locale_chosen, employee_number, position,
-    department_id, manager_id, manager_raw, hire_date, active, hr, extra_days, early_leave,
+    department_id, manager_id, manager_raw, ad_manager_id, manager_override_id, manager_conflict_ad_id, manager_conflict_raw,
+    hire_date, active, hr, extra_days, early_leave,
     raw_attributes, last_sync_at, created_at, updated_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
 ON CONFLICT (keycloak_sub) DO UPDATE SET
     display_name = EXCLUDED.display_name,
     email = EXCLUDED.email,
@@ -83,6 +84,10 @@ ON CONFLICT (keycloak_sub) DO UPDATE SET
     department_id = EXCLUDED.department_id,
     manager_id = EXCLUDED.manager_id,
     manager_raw = EXCLUDED.manager_raw,
+    ad_manager_id = EXCLUDED.ad_manager_id,
+    manager_override_id = EXCLUDED.manager_override_id,
+    manager_conflict_ad_id = EXCLUDED.manager_conflict_ad_id,
+    manager_conflict_raw = EXCLUDED.manager_conflict_raw,
     hire_date = EXCLUDED.hire_date,
     active = EXCLUDED.active,
     hr = EXCLUDED.hr,
@@ -94,7 +99,8 @@ ON CONFLICT (keycloak_sub) DO UPDATE SET
 RETURNING ` + employeeCols
 	row := s.q.QueryRow(ctx, q,
 		e.ID, e.Subject, e.DisplayName, e.Email, emptyLocale(e.Locale), e.LocaleChosen, e.EmployeeNumber, e.Position,
-		uuidArg(e.DepartmentID), uuidArg(e.ManagerID), e.ManagerRaw, datePtr(e.HireDate), e.Active, e.HR, e.ExtraDays, e.EarlyLeave,
+		uuidArg(e.DepartmentID), uuidArg(e.ManagerID), e.ManagerRaw, uuidArg(e.ADManagerID), uuidArg(e.ManagerOverrideID), uuidArg(e.ManagerConflictADID), e.ManagerConflictRaw,
+		datePtr(e.HireDate), e.Active, e.HR, e.ExtraDays, e.EarlyLeave,
 		jsonArg(e.Raw), timePtr(e.LastSyncAt), e.CreatedAt.UTC(), e.UpdatedAt.UTC(),
 	)
 	return scanEmployee(row)
@@ -104,11 +110,13 @@ func (s *pgQ) UpdateEmployee(ctx context.Context, e model.Employee) error {
 	tag, err := s.q.Exec(ctx, `
 UPDATE employee SET
     keycloak_sub=$2, display_name=$3, email=$4, locale=$5, locale_chosen=$6, employee_number=$7,
-    position=$8, department_id=$9, manager_id=$10, manager_raw=$11, hire_date=$12, active=$13, hr=$14,
-    extra_days=$15, early_leave=$16, raw_attributes=$17, last_sync_at=$18, updated_at=$19
+    position=$8, department_id=$9, manager_id=$10, manager_raw=$11, ad_manager_id=$12, manager_override_id=$13,
+    manager_conflict_ad_id=$14, manager_conflict_raw=$15, hire_date=$16, active=$17, hr=$18,
+    extra_days=$19, early_leave=$20, raw_attributes=$21, last_sync_at=$22, updated_at=$23
 WHERE id=$1`,
 		e.ID, e.Subject, e.DisplayName, e.Email, emptyLocale(e.Locale), e.LocaleChosen, e.EmployeeNumber,
-		e.Position, uuidArg(e.DepartmentID), uuidArg(e.ManagerID), e.ManagerRaw, datePtr(e.HireDate), e.Active, e.HR,
+		e.Position, uuidArg(e.DepartmentID), uuidArg(e.ManagerID), e.ManagerRaw, uuidArg(e.ADManagerID), uuidArg(e.ManagerOverrideID),
+		uuidArg(e.ManagerConflictADID), e.ManagerConflictRaw, datePtr(e.HireDate), e.Active, e.HR,
 		e.ExtraDays, e.EarlyLeave, jsonArg(e.Raw), timePtr(e.LastSyncAt), e.UpdatedAt.UTC(),
 	)
 	if err != nil {
@@ -378,6 +386,15 @@ FROM calendar_day WHERE day >= $1 AND day <= $2 ORDER BY day`, dateArg(from), da
 }
 
 func (s *pgQ) InsertNotification(ctx context.Context, n model.Notification) error {
+	if n.DedupeKey != "" {
+		_, err := s.q.Exec(ctx, `
+INSERT INTO notification (
+    id, request_id, recipient_employee_id, kind, recipient_email, language, due_at, sent_at, last_error, notice_created, created_at, dedupe_key, payload)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+ON CONFLICT (kind, recipient_employee_id, dedupe_key) WHERE dedupe_key <> '' DO NOTHING`,
+			n.ID, uuidArg(n.RequestID), n.RecipientEmployeeID, n.Kind, n.RecipientEmail, emptyLocale(n.Language), n.DueAt.UTC(), timePtr(n.SentAt), n.LastError, n.NoticeCreated, n.CreatedAt.UTC(), n.DedupeKey, jsonArg(n.Payload))
+		return err
+	}
 	_, err := s.q.Exec(ctx, `
 INSERT INTO notification (
     id, request_id, recipient_employee_id, kind, recipient_email, language, due_at, sent_at, last_error, notice_created, created_at)
@@ -479,7 +496,7 @@ func (s *pgQ) GetScheduleLock(ctx context.Context, year int) (model.ScheduleLock
 	return lock, nil
 }
 
-const employeeCols = `id::text, keycloak_sub, display_name, email, locale, locale_chosen, employee_number, position, department_id::text, manager_id::text, manager_raw, to_char(hire_date, 'YYYY-MM-DD'), active, hr, extra_days, early_leave, raw_attributes, last_sync_at, created_at, updated_at`
+const employeeCols = `id::text, keycloak_sub, display_name, email, locale, locale_chosen, employee_number, position, department_id::text, manager_id::text, manager_raw, ad_manager_id::text, manager_override_id::text, manager_conflict_ad_id::text, manager_conflict_raw, to_char(hire_date, 'YYYY-MM-DD'), active, hr, extra_days, early_leave, raw_attributes, last_sync_at, created_at, updated_at`
 
 const yearCols = `id::text, employee_id::text, to_char(starts_on, 'YYYY-MM-DD'), to_char(ends_on, 'YYYY-MM-DD'), granted_days, extra_days, accrued_adjustment, unpaid_calendar_days, excess_unpaid_days, created_at, updated_at`
 
@@ -487,15 +504,15 @@ const requestCols = `id::text, employee_id::text, leave_year_id::text, type, sta
 
 const requestColsAliased = `r.id::text, r.employee_id::text, r.leave_year_id::text, r.type, r.status, to_char(r.starts_on, 'YYYY-MM-DD'), to_char(r.ends_on, 'YYYY-MM-DD'), r.counted_days, r.reason_code, r.certificate_number, r.replaces_id::text, r.successor_id::text, r.cancel_reason, r.overlap_choice, r.manager_vacant, r.self_approval, r.needs_confirmation, r.pay_by_warning, r.acknowledged_at, r.confirmed_at, r.processed_at, r.processed_by::text, r.created_at, r.updated_at, r.finance_sent_at, r.finance_sent_by::text`
 
-const noteCols = `id::text, request_id::text, recipient_employee_id::text, kind, recipient_email, language, due_at, sent_at, last_error, notice_created, created_at`
+const noteCols = `id::text, request_id::text, recipient_employee_id::text, kind, recipient_email, language, due_at, sent_at, last_error, notice_created, created_at, dedupe_key, payload`
 
 type scanner interface{ Scan(dest ...any) error }
 
 func scanEmployee(row scanner) (model.Employee, error) {
 	var e model.Employee
-	var dept, manager, hire *string
+	var dept, manager, adManager, override, conflict, hire *string
 	var raw []byte
-	err := row.Scan(&e.ID, &e.Subject, &e.DisplayName, &e.Email, &e.Locale, &e.LocaleChosen, &e.EmployeeNumber, &e.Position, &dept, &manager, &e.ManagerRaw, &hire, &e.Active, &e.HR, &e.ExtraDays, &e.EarlyLeave, &raw, &e.LastSyncAt, &e.CreatedAt, &e.UpdatedAt)
+	err := row.Scan(&e.ID, &e.Subject, &e.DisplayName, &e.Email, &e.Locale, &e.LocaleChosen, &e.EmployeeNumber, &e.Position, &dept, &manager, &e.ManagerRaw, &adManager, &override, &conflict, &e.ManagerConflictRaw, &hire, &e.Active, &e.HR, &e.ExtraDays, &e.EarlyLeave, &raw, &e.LastSyncAt, &e.CreatedAt, &e.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.Employee{}, ErrNotFound
 	}
@@ -504,6 +521,9 @@ func scanEmployee(row scanner) (model.Employee, error) {
 	}
 	e.DepartmentID = deref(dept)
 	e.ManagerID = deref(manager)
+	e.ADManagerID = deref(adManager)
+	e.ManagerOverrideID = deref(override)
+	e.ManagerConflictADID = deref(conflict)
 	e.HireDate = parseDatePtr(hire)
 	e.Raw = raw
 	return e, nil
@@ -592,9 +612,13 @@ func scanNotes(rows pgx.Rows) ([]model.Notification, error) {
 	var out []model.Notification
 	for rows.Next() {
 		var n model.Notification
-		if err := rows.Scan(&n.ID, &n.RequestID, &n.RecipientEmployeeID, &n.Kind, &n.RecipientEmail, &n.Language, &n.DueAt, &n.SentAt, &n.LastError, &n.NoticeCreated, &n.CreatedAt); err != nil {
+		var requestID *string
+		var payload []byte
+		if err := rows.Scan(&n.ID, &requestID, &n.RecipientEmployeeID, &n.Kind, &n.RecipientEmail, &n.Language, &n.DueAt, &n.SentAt, &n.LastError, &n.NoticeCreated, &n.CreatedAt, &n.DedupeKey, &payload); err != nil {
 			return nil, err
 		}
+		n.RequestID = deref(requestID)
+		n.Payload = payload
 		out = append(out, n)
 	}
 	return out, rows.Err()

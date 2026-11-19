@@ -2,6 +2,7 @@ package portal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -47,6 +48,12 @@ func (s *Service) Dispatch(ctx context.Context, sender notify.Sender) error {
 			return err
 		}
 		for _, n := range due {
+			if n.Kind == notify.KindManagerADChanged {
+				if err := s.stageManagerMail(ctx, q, n, &batch); err != nil {
+					return err
+				}
+				continue
+			}
 			req, err := q.GetRequest(ctx, n.RequestID)
 			if err != nil {
 				return err
@@ -354,9 +361,6 @@ func (s *Service) ApplyDirectory(ctx context.Context, users []DirectoryUser) err
 				}
 				emp.DepartmentID = unit.ID
 			}
-			if u.ManagerRaw != "" {
-				emp.ManagerRaw = u.ManagerRaw
-			}
 			if !found {
 				stored, err := q.UpsertEmployee(ctx, emp)
 				if err != nil {
@@ -368,23 +372,48 @@ func (s *Service) ApplyDirectory(ctx context.Context, users []DirectoryUser) err
 			}
 			rows = append(rows, saved{emp: emp, raw: u.ManagerRaw})
 		}
-		for _, row := range rows {
-			if row.raw == "" {
+		for i := range rows {
+			if rows[i].raw == "" {
 				continue
 			}
-			mgr, err := s.resolveManager(ctx, q, row.raw)
-			if err != nil || mgr.ID == row.emp.ID {
-				continue
-			}
-			row.emp.ManagerID = mgr.ID
-			row.emp.ManagerRaw = row.raw
-			row.emp.UpdatedAt = s.now()
-			if err := q.UpdateEmployee(ctx, row.emp); err != nil {
+			if err := s.applyADManager(ctx, q, &rows[i].emp, rows[i].raw); err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+}
+
+func (s *Service) stageManagerMail(ctx context.Context, q store.Queries, n model.Notification, batch *[]outbound) error {
+	var body struct {
+		Employee        string `json:"employee"`
+		ADManager       string `json:"ad_manager"`
+		PreviousManager string `json:"previous_manager"`
+		OverrideManager string `json:"override_manager"`
+	}
+	_ = json.Unmarshal(n.Payload, &body)
+	content := notify.Render(notify.Vars{
+		Kind: n.Kind, Locale: n.Language, Role: "hr", Employee: body.Employee,
+		ADManager: body.ADManager, PreviousManager: body.PreviousManager, Manager: body.OverrideManager,
+	})
+	if !n.NoticeCreated {
+		if err := q.InsertNotice(ctx, model.Notice{
+			ID: s.id(), EmployeeID: n.RecipientEmployeeID, NotificationID: n.ID,
+			Kind: n.Kind, Title: content.Title, Body: content.Body, CreatedAt: s.now(),
+		}); err != nil {
+			return err
+		}
+		n.NoticeCreated = true
+	}
+	if n.RecipientEmail == "" {
+		n.LastError = "no email"
+		return q.UpdateNotification(ctx, n)
+	}
+	if err := q.UpdateNotification(ctx, n); err != nil {
+		return err
+	}
+	*batch = append(*batch, outbound{note: n, msg: notify.Message{To: n.RecipientEmail, Subject: content.Subject, Body: content.Body, HTML: content.HTML}})
+	return nil
 }
 
 // DirectoryUser is one account from the Keycloak sync.

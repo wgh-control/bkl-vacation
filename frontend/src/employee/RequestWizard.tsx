@@ -6,7 +6,7 @@ import { calendarMap, calendarYear, todayISO } from '../domain/dates'
 import { hasReject, previewLeave } from '../domain/leave'
 import { formatDay, formatDays } from '../format'
 import { translateError, useI18n } from '../i18n/context'
-import { useApi } from '../session'
+import { useApi, useMe } from '../session'
 import { useLoad } from '../useLoad'
 
 const types: RequestType[] = ['vacation', 'day_off', 'sick']
@@ -22,6 +22,7 @@ const mustGrant = new Set<DayOffReason>(['unpaid_childbirth', 'unpaid_marriage',
 
 export function RequestWizard() {
   const api = useApi()
+  const me = useMe()
   const navigate = useNavigate()
   const { t, language } = useI18n()
   const [params] = useSearchParams()
@@ -113,6 +114,11 @@ export function RequestWizard() {
           {planningNext ? t('request.wizard.nextYearTitle') : t('request.wizard.title')}
         </span>
       </h1>
+      <p className="profile" data-testid="wizard-manager">
+        <span>
+          {t('employee.manager')}: {me.manager ? me.manager.displayName : t('employee.managerNone')}
+        </span>
+      </p>
       <form className="split" onSubmit={(event) => void submit(event)}>
         <div className="card stack">
           <fieldset className="field">

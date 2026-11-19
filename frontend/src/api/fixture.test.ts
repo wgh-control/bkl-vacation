@@ -5,6 +5,32 @@ import { createFixtureApi } from './fixture'
 const TODAY = '2026-11-13'
 
 describe('fixture workflow', () => {
+  it('groups people under the effective manager and lets HR override the directory', async () => {
+    const api = createFixtureApi({ today: TODAY })
+    const before = await api.getManagerDirectory()
+    const ivan = before.groups.flatMap((group) => group.people).find((person) => person.id === 'emp-ivan')
+    expect(ivan?.manual).toBe(true)
+    expect(ivan?.manager?.displayName).toBe('Соколова Анна')
+    expect(ivan?.adChange?.displayName).toBe('Кузнецов Олег')
+    const annaGroup = before.groups.find((group) => group.manager?.id === 'emp-anna')
+    expect(annaGroup?.people.some((person) => person.id === 'emp-ivan')).toBe(true)
+
+    const taken = await api.setManager('emp-ivan', { action: 'take_ad' })
+    const moved = taken.groups.flatMap((group) => group.people).find((person) => person.id === 'emp-ivan')
+    expect(moved?.manual).toBe(false)
+    expect(moved?.manager?.id).toBe('emp-oleg')
+    expect(moved?.adChange).toBeNull()
+
+    const manual = await api.setManager('emp-maria', { action: 'set', managerId: 'emp-oleg' })
+    const maria = manual.groups.flatMap((group) => group.people).find((person) => person.id === 'emp-maria')
+    expect(maria?.manual).toBe(true)
+    expect(maria?.manager?.id).toBe('emp-oleg')
+    const cleared = await api.setManager('emp-maria', { action: 'clear' })
+    const restored = cleared.groups.flatMap((group) => group.people).find((person) => person.id === 'emp-maria')
+    expect(restored?.manager?.id).toBe('emp-finance')
+    expect(restored?.manual).toBe(false)
+  })
+
   it('keeps an employee plan of planned, approved, and moved days across years', async () => {
     const api = createFixtureApi({ today: TODAY })
     const requests = await api.getRequests()

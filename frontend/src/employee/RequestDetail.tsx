@@ -68,6 +68,11 @@ export function RequestDetail() {
         <span>{request.person.displayName}</span>
         <span>{formatRange(request.start, request.end, language)}</span>
         <StatusPill status={request.status} />
+        {own ? (
+          <span data-testid="request-manager">
+            {t('employee.manager')}: {me.manager ? me.manager.displayName : t('employee.managerNone')}
+          </span>
+        ) : null}
       </p>
       <div className="card stack">
         <p>

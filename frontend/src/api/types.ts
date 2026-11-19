@@ -127,6 +127,34 @@ export type Department = {
   name: string
 }
 
+export type ManagerChoice = 'set' | 'clear' | 'take_ad' | 'keep'
+
+export type ManagedPerson = {
+  id: string
+  displayName: string
+  email?: string
+  employeeNumber?: string
+  position?: string
+  department?: string
+  active: boolean
+  manual: boolean
+  manager: PersonRef | null
+  adManager: PersonRef | null
+  adManagerRaw?: string
+  override: PersonRef | null
+  adChange: PersonRef | null
+  adChangeRaw?: string
+}
+
+export type ManagerGroup = {
+  manager: PersonRef | null
+  people: ManagedPerson[]
+}
+
+export type ManagerDirectory = {
+  groups: ManagerGroup[]
+}
+
 export type CreateRequestBody = {
   type: RequestType
   start: string
@@ -186,4 +214,6 @@ export type VacationApi = {
   exportReport(query: ExportQuery): Promise<ReportFile>
   listPeople(query?: string): Promise<PersonRef[]>
   listDepartments(): Promise<Department[]>
+  getManagerDirectory(): Promise<ManagerDirectory>
+  setManager(employeeId: string, body: { action: ManagerChoice; managerId?: string }): Promise<ManagerDirectory>
 }
